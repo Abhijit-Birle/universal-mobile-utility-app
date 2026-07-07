@@ -1,0 +1,183 @@
+/* ─── Expenses clay styles ───────────────────────────────────────────────── */
+
+/* Quick capture */
+.quick-capture {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.quick-capture-input {
+  flex: 1;
+  background: var(--bg-card);
+  border: 1.5px solid transparent;
+  border-radius: 14px;
+  color: var(--text-primary);
+  font-family: var(--font-serif);
+  font-size: 15px;
+  padding: 12px 16px;
+  outline: none;
+  -webkit-appearance: none;
+  appearance: none;
+  transition: border-color 0.15s, background 0.25s;
+  box-shadow: var(--shadow-card-sm);
+}
+
+.quick-capture-input:focus { border-color: var(--divider-strong); }
+.quick-capture-input::placeholder { color: var(--text-muted); }
+
+.quick-capture-btn {
+  width: 48px;
+  height: 48px;
+  border-radius: 14px;
+  background: var(--bg-card);
+  border: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: var(--text-secondary);
+  flex-shrink: 0;
+  min-height: 0;
+  min-width: 0;
+  box-shadow: var(--shadow-card-sm);
+  transition: transform 0.12s, background 0.25s;
+}
+.quick-capture-btn:active { transform: scale(0.92); }
+
+/* Category grid */
+.category-section-label {
+  font-family: var(--font-serif);
+  font-size: 11px;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 10px;
+  font-weight: 500;
+}
+
+.category-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+.category-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 14px 8px;
+  border-radius: var(--card-radius-sm);
+  background: var(--bg-card);
+  box-shadow: var(--shadow-card-sm);
+  cursor: pointer;
+  min-height: 76px;
+  transition: transform 0.12s, box-shadow 0.12s, background 0.25s;
+  min-width: 0;
+  border: none;
+}
+
+.category-cell:active {
+  transform: scale(0.94);
+  box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+}
+
+.category-cell-label {
+  font-family: var(--font-serif);
+  font-size: 11px;
+  color: var(--text-secondary);
+  text-align: center;
+}
+
+/* Expense row — clay card */
+.expense-card {
+  background: var(--bg-card);
+  border-radius: var(--card-radius-sm);
+  box-shadow: var(--shadow-card-sm);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 13px 16px;
+  cursor: pointer;
+  transition: transform 0.12s, background 0.25s;
+  min-height: 52px;
+}
+.expense-card:active { transform: scale(0.98); }
+
+.expense-icon-wrap {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: var(--bg-input);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.expense-note {
+  font-family: var(--font-serif);
+  font-size: 14px;
+  color: var(--text-primary);
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.expense-note.unsorted { color: var(--text-secondary); font-style: italic; }
+
+.expense-meta {
+  font-family: var(--font-serif);
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.expense-amount {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 14px;
+  color: var(--text-primary);
+  font-weight: 500;
+  text-align: right;
+  flex-shrink: 0;
+}
+
+/* Recurring overdue prompt — clay card */
+.recurring-prompt {
+  background: var(--clay-warm);
+  border-radius: var(--card-radius-sm);
+  box-shadow: var(--shadow-card-sm);
+  padding: 14px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.recurring-prompt-text {
+  font-family: var(--font-serif);
+  font-size: 13px;
+  color: var(--text-on-peach);
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.recurring-prompt-btn {
+  font-family: var(--font-serif);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-on-peach);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  min-height: 0;
+  min-width: 0;
+  white-space: nowrap;
+}

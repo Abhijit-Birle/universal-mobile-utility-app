@@ -1,0 +1,202 @@
+/* Neumorphic UI Classes */
+
+.neu-card {
+  background: var(--bg-app);
+  border-radius: var(--card-radius);
+  box-shadow: var(--shadow-raised);
+  padding: var(--card-pad);
+  transition: box-shadow 0.25s, transform 0.15s;
+}
+
+.neu-card-sm {
+  background: var(--bg-app);
+  border-radius: var(--card-radius-sm);
+  box-shadow: var(--shadow-raised-sm);
+  padding: 14px var(--card-pad);
+}
+
+.neu-inset {
+  background: var(--bg-app);
+  border-radius: var(--card-radius-sm);
+  box-shadow: var(--shadow-inset);
+  padding: 14px var(--card-pad);
+}
+
+.neu-btn-circle {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: var(--bg-app);
+  box-shadow: var(--shadow-raised-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  cursor: pointer;
+  color: var(--text-secondary);
+  transition: box-shadow 0.15s, color 0.15s;
+}
+.neu-btn-circle:active {
+  box-shadow: var(--shadow-inset);
+}
+.neu-btn-circle.active {
+  color: var(--accent-primary);
+}
+
+.neu-bottom-nav {
+  position: fixed;
+  bottom: calc(24px + var(--safe-bottom));
+  left: 24px;
+  right: 24px;
+  height: 64px;
+  background: var(--bg-app);
+  border-radius: 32px;
+  box-shadow: var(--shadow-raised);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 16px;
+  z-index: 100;
+}
+
+.neu-nav-item {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: color 0.2s, box-shadow 0.2s;
+}
+.neu-nav-item.active {
+  color: var(--accent-primary);
+  /* Active state has inset shadow per user request "active/pressed state on any button: swap raised shadow for inset" */
+  box-shadow: var(--shadow-inset);
+}
+.neu-nav-item:active {
+  box-shadow: var(--shadow-inset);
+}
+
+.neu-nav-fab {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: var(--bg-app);
+  box-shadow: var(--shadow-raised);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  cursor: pointer;
+  color: var(--accent-primary);
+  transform: translateY(-20px);
+  transition: box-shadow 0.15s;
+}
+.neu-nav-fab:active {
+  box-shadow: var(--shadow-inset);
+  transform: translateY(-18px);
+}
+
+.neu-pill-input {
+  display: flex;
+  align-items: center;
+  background: var(--bg-app);
+  border-radius: 999px;
+  box-shadow: var(--shadow-inset);
+  padding: 8px 16px;
+  min-height: 44px;
+}
+.neu-pill-input input {
+  flex: 1;
+  background: none;
+  border: none;
+  outline: none;
+  font-family: var(--font-serif);
+  font-size: 15px;
+  color: var(--text-primary);
+}
+.neu-pill-input input::placeholder {
+  color: var(--text-muted);
+}
+
+.neu-badge {
+  background: var(--bg-app);
+  border-radius: 999px;
+  box-shadow: var(--shadow-raised-sm);
+  padding: 4px 10px;
+  font-size: 12px;
+  color: var(--accent-primary);
+  font-weight: 500;
+}
+
+.neu-grid-cell {
+  width: 100%;
+  padding-bottom: 30%; /* Aspect ratio */
+  border-radius: 6px;
+  background: var(--bg-app);
+  box-shadow: var(--shadow-inset);
+  transition: all 0.2s;
+}
+.neu-grid-cell.filled {
+  background: var(--accent-primary);
+  box-shadow: var(--shadow-raised-sm);
+}
+
+.neu-progress-ring {
+  transform: rotate(-90deg);
+  transform-origin: 50% 50%;
+}
+.neu-progress-track {
+  fill: transparent;
+  stroke: #c8c9d1;
+  stroke-width: 8;
+  /* Add inner shadow to svg stroke? not possible with simple CSS, but let's just make it inset color */
+}
+.neu-progress-fill {
+  fill: transparent;
+  stroke: var(--accent-primary);
+  stroke-width: 8;
+  stroke-linecap: round;
+  transition: stroke-dashoffset 0.5s ease;
+  filter: drop-shadow(4px 4px 8px rgba(200, 201, 209, 0.8));
+}
+
+.neu-top-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: calc(var(--safe-top) + 16px) 16px 16px;
+  background: transparent;
+}
+.neu-title {
+  font-size: 28px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.neu-pill {
+  padding: 8px 16px;
+  border-radius: 999px;
+  background: var(--bg-app);
+  box-shadow: var(--shadow-raised-sm);
+  border: none;
+  font-family: var(--font-serif);
+  font-size: 14px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+.neu-pill.active {
+  color: var(--accent-primary);
+  box-shadow: var(--shadow-inset);
+}
+.neu-pill:active {
+  box-shadow: var(--shadow-inset);
+}

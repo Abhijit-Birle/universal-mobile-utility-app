@@ -1,0 +1,486 @@
+/* ─── Ledger Clay Design System ──────────────────────────────────────────────
+   Full clay UI: rounded cards, soft layered shadows, pastel accents.
+   Supports light + dark mode via [data-theme="dark"] on <html>.
+   ─────────────────────────────────────────────────────────────────────────── */
+
+/* ── Neumorphic Tokens ───────────────────────────────────────────────────── */
+:root {
+  /* Backgrounds */
+  --bg-app:       #e6e7ee;
+  --bg-card:      #e6e7ee;
+  --bg-card-2:    #e6e7ee;
+  --bg-elevated:  #e6e7ee;
+  --bg-input:     #e6e7ee;
+
+  /* Text */
+  --text-primary:   #3d3d45;
+  --text-secondary: #6b6b76;
+  --text-muted:     #8a8a95;
+  --text-on-lavender: #3d3d45;
+  --text-on-sage:     #3d3d45;
+  --text-on-peach:    #3d3d45;
+  --text-on-lilac:    #3d3d45;
+  --text-on-sky:      #3d3d45;
+  --text-on-rose:     #3d3d45;
+
+  /* Dividers */
+  --divider:        rgba(0,0,0,0.05);
+  --divider-strong: rgba(0,0,0,0.1);
+
+  /* Neumorphic Shadows */
+  --shadow-raised:    8px 8px 16px #c8c9d1, -8px -8px 16px #ffffff;
+  --shadow-raised-sm: 4px 4px 8px #c8c9d1, -4px -4px 8px #ffffff;
+  --shadow-inset:     inset 4px 4px 8px #c8c9d1, inset -4px -4px 8px #ffffff;
+  --shadow-card:      var(--shadow-raised);
+  --shadow-card-sm:   var(--shadow-raised-sm);
+  --shadow-sheet:     0 -10px 40px rgba(200, 201, 209, 0.5);
+
+  /* Accents */
+  --accent-primary:   #8b7cf6;
+  --accent-secondary: #e08a5c;
+  
+  /* Category aliases */
+  --accent-study:     var(--accent-primary);
+  --accent-work:      var(--accent-primary);
+  --accent-money:     var(--accent-secondary);
+  --accent-food:      var(--accent-secondary);
+  --accent-transport: var(--accent-primary);
+  --accent-health:    var(--accent-secondary);
+  --accent-relocation:var(--accent-primary);
+  --accent-shopping:  var(--accent-secondary);
+  --accent-other:     var(--accent-primary);
+
+  /* Priority */
+  --priority-high:   #C0576A;
+  --priority-medium: #B07840;
+  --priority-low:    #9B96B0;
+
+  /* Typography */
+  --font-serif: system-ui, -apple-system, sans-serif;
+  --font-mono:  system-ui, -apple-system, sans-serif;
+
+  /* Layout */
+  --card-radius:    20px;
+  --card-radius-sm: 16px;
+  --card-pad:       16px;
+  --page-pad:       16px;
+  --gap:            16px;
+
+  /* Safe areas */
+  --safe-top:    env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left:   env(safe-area-inset-left, 0px);
+  --safe-right:  env(safe-area-inset-right, 0px);
+
+  --undo-bg: #e6e7ee;
+  --undo-text: #3d3d45;
+  --toggle-bg: #e6e7ee;
+  --toggle-icon: #6b6b76;
+}
+
+/* ── Dark Mode ───────────────────────────────────────────────────────────── */
+[data-theme="dark"] {
+  --bg-app:       #292930;
+  --bg-card:      #292930;
+  --bg-card-2:    #292930;
+  --bg-elevated:  #292930;
+  --bg-input:     #292930;
+
+  --text-primary:   #e6e7ee;
+  --text-secondary: #a0a0ab;
+  --text-muted:     #6b6b76;
+  --text-on-lavender: #e6e7ee;
+  --text-on-sage:     #e6e7ee;
+  --text-on-peach:    #e6e7ee;
+  --text-on-lilac:    #e6e7ee;
+  --text-on-sky:      #e6e7ee;
+  --text-on-rose:     #e6e7ee;
+
+  --divider:        rgba(255,255,255,0.05);
+  --divider-strong: rgba(255,255,255,0.1);
+
+  --shadow-raised:    8px 8px 16px #1b1b20, -8px -8px 16px #373740;
+  --shadow-raised-sm: 4px 4px 8px #1b1b20, -4px -4px 8px #373740;
+  --shadow-inset:     inset 4px 4px 8px #1b1b20, inset -4px -4px 8px #373740;
+  --shadow-card:      var(--shadow-raised);
+  --shadow-card-sm:   var(--shadow-raised-sm);
+  --shadow-sheet:     0 -10px 40px rgba(0, 0, 0, 0.8);
+
+  --undo-bg: #292930;
+  --undo-text: #e6e7ee;
+  --toggle-bg: #292930;
+  --toggle-icon: #a0a0ab;
+}
+/* ── Global reset ───────────────────────────────────────────────────────── */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  -webkit-tap-highlight-color: transparent;
+}
+
+html {
+  height: 100%;
+  overscroll-behavior: none;
+}
+
+body {
+  height: 100%;
+  background: var(--bg-app);
+  color: var(--text-primary);
+  font-family: var(--font-serif);
+  font-size: 15px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overscroll-behavior: none;
+  position: fixed;
+  width: 100%;
+  overflow: hidden;
+  transition: background 0.25s ease, color 0.25s ease;
+}
+
+#root {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* ── Clay card ──────────────────────────────────────────────────────────── */
+.clay-card {
+  background: var(--bg-card);
+  border-radius: var(--card-radius);
+  box-shadow: var(--shadow-card);
+  padding: var(--card-pad);
+  transition: background 0.25s, box-shadow 0.25s;
+}
+
+.clay-card-sm {
+  background: var(--bg-card);
+  border-radius: var(--card-radius-sm);
+  box-shadow: var(--shadow-card-sm);
+  padding: 14px var(--card-pad);
+  transition: background 0.25s, box-shadow 0.25s;
+}
+
+/* Colored clay cards (now aliased to normal neumorphic bg) */
+.clay-lavender { background: var(--bg-app) !important; }
+.clay-sage     { background: var(--bg-app) !important; }
+.clay-peach    { background: var(--bg-app) !important; }
+.clay-lilac    { background: var(--bg-app) !important; }
+.clay-sky      { background: var(--bg-app) !important; }
+.clay-warm     { background: var(--bg-app) !important; }
+.clay-rose     { background: var(--bg-app) !important; }
+.clay-mint     { background: var(--bg-app) !important; }
+
+/* ── Scrollable area ────────────────────────────────────────────────────── */
+.scroll-content {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-y: contain;
+  padding: var(--page-pad);
+  padding-bottom: calc(80px + var(--safe-bottom));
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap);
+}
+
+/* ── Typography ─────────────────────────────────────────────────────────── */
+.font-serif { font-family: var(--font-serif); }
+.font-mono  { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+
+.eyebrow {
+  font-family: var(--font-serif);
+  font-size: 11px;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+/* ── Amount ─────────────────────────────────────────────────────────────── */
+.amount {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-primary);
+}
+
+/* ── Touch targets ──────────────────────────────────────────────────────── */
+button, [role="button"] {
+  min-height: 44px;
+  min-width: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  border: none;
+  background: none;
+  color: inherit;
+  font-family: inherit;
+  font-size: inherit;
+  padding: 0;
+  text-decoration: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* ── Clay button (text only per spec, but with clay treatment) ───────────── */
+.btn-clay {
+  font-family: var(--font-serif);
+  font-size: 14px;
+  color: var(--text-secondary);
+  padding: 0 14px;
+  min-height: 44px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  border-radius: var(--card-radius-sm);
+  transition: background 0.15s;
+}
+
+.btn-clay:active { background: var(--divider); }
+.btn-clay-primary { color: var(--text-primary); font-weight: 500; }
+.btn-clay-danger  { color: var(--priority-high); }
+
+.btn-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: background 0.15s;
+}
+.btn-icon:active { background: var(--divider); }
+
+/* ── FAB (floating add button) ──────────────────────────────────────────── */
+.fab {
+  position: fixed;
+  bottom: calc(24px + var(--safe-bottom));
+  right: 24px;
+  width: 56px;
+  height: 56px;
+  border-radius: 18px;
+  background: var(--text-primary);
+  color: var(--bg-app);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow:
+    0 4px 0px rgba(0,0,0,0.15),
+    0 8px 24px rgba(0,0,0,0.2);
+  cursor: pointer;
+  border: none;
+  z-index: 90;
+  transition: transform 0.15s, box-shadow 0.15s;
+  min-height: 0;
+  min-width: 0;
+}
+
+.fab:active {
+  transform: translateY(2px);
+  box-shadow: 0 2px 0px rgba(0,0,0,0.15), 0 4px 12px rgba(0,0,0,0.2);
+}
+
+/* ── Segmented control ──────────────────────────────────────────────────── */
+.segmented {
+  display: flex;
+  background: var(--bg-card-2);
+  border-radius: 12px;
+  padding: 3px;
+  gap: 2px;
+}
+
+.seg-option {
+  flex: 1;
+  text-align: center;
+  font-family: var(--font-serif);
+  font-size: 13px;
+  color: var(--text-muted);
+  padding: 7px 8px;
+  border-radius: 10px;
+  cursor: pointer;
+  min-height: 0;
+  transition: background 0.15s, color 0.15s;
+  background: none;
+  border: none;
+}
+.seg-option.active {
+  background: var(--bg-card);
+  color: var(--text-primary);
+  box-shadow: var(--shadow-card-sm);
+}
+
+/* ── Pill chip ──────────────────────────────────────────────────────────── */
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-family: var(--font-serif);
+  font-size: 12px;
+  color: var(--text-secondary);
+  padding: 5px 11px;
+  border-radius: 999px;
+  background: var(--bg-card-2);
+  cursor: pointer;
+  min-height: 0;
+  transition: all 0.15s;
+  white-space: nowrap;
+  border: none;
+  box-shadow: var(--shadow-card-sm);
+}
+.pill.active {
+  background: var(--text-primary);
+  color: var(--bg-card);
+}
+
+/* ── Dot ────────────────────────────────────────────────────────────────── */
+.dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+/* ── Sheet overlay ──────────────────────────────────────────────────────── */
+.sheet-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.4);
+  z-index: 100;
+  display: flex;
+  align-items: flex-end;
+  animation: fadeIn 0.2s ease;
+  backdrop-filter: blur(4px);
+}
+
+.sheet {
+  width: 100%;
+  max-height: 90vh;
+  background: var(--bg-elevated);
+  border-radius: 24px 24px 0 0;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding-bottom: calc(20px + var(--safe-bottom));
+  box-shadow: var(--shadow-sheet);
+  animation: slideUp 0.3s cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+.sheet-handle {
+  width: 40px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--divider-strong);
+  margin: 14px auto 10px;
+}
+
+.sheet-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 20px 14px;
+  border-bottom: 1px solid var(--divider);
+}
+
+.sheet-title {
+  font-family: var(--font-serif);
+  font-size: 17px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.sheet-body { padding: 20px; }
+
+/* ── Form ───────────────────────────────────────────────────────────────── */
+.field { margin-bottom: 22px; }
+
+.field-label {
+  display: block;
+  font-family: var(--font-serif);
+  font-size: 11px;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 7px;
+  font-weight: 500;
+}
+
+.field-input {
+  width: 100%;
+  background: var(--bg-input);
+  border: none;
+  box-shadow: var(--shadow-inset);
+  border-radius: 12px;
+  color: var(--text-primary);
+  font-family: var(--font-serif);
+  font-size: 15px;
+  padding: 11px 14px;
+  outline: none;
+  transition: box-shadow 0.15s, background 0.25s;
+  -webkit-appearance: none;
+  appearance: none;
+}
+.field-input:focus { 
+  /* Deepen inset on focus instead of border */
+  box-shadow: inset 6px 6px 12px #c8c9d1, inset -6px -6px 12px #ffffff;
+}
+.field-input::placeholder { color: var(--text-muted); }
+.field-input-mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+
+textarea.field-input { min-height: 80px; resize: none; line-height: 1.5; }
+
+/* ── Empty state ────────────────────────────────────────────────────────── */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 36px 24px;
+  gap: 6px;
+  text-align: center;
+  box-shadow: var(--shadow-inset);
+  border-radius: var(--card-radius);
+  background: var(--bg-app);
+}
+.empty-state-icon  { font-size: 28px; opacity: 0.3; margin-bottom: 4px; }
+.empty-state-title { font-family: var(--font-serif); font-size: 15px; color: var(--text-secondary); }
+.empty-state-sub   { font-family: var(--font-serif); font-size: 13px; color: var(--text-muted); }
+
+/* ── Animations ─────────────────────────────────────────────────────────── */
+@keyframes fadeIn   { from { opacity: 0; } to { opacity: 1; } }
+@keyframes slideUp  { from { transform: translateY(100%); } to { transform: translateY(0); } }
+@keyframes slideUpFade { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+@keyframes undoProgress { from { width: 100%; } to { width: 0%; } }
+
+/* ── Progress bar ───────────────────────────────────────────────────────── */
+.progress-track {
+  height: 5px;
+  border-radius: 999px;
+  background: var(--divider);
+  overflow: hidden;
+  margin: 8px 0 4px;
+}
+.progress-fill {
+  height: 100%;
+  border-radius: 999px;
+  transition: width 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+  max-width: 100%;
+}
+
+/* ── Storage warning ────────────────────────────────────────────────────── */
+.storage-warning {
+  background: var(--clay-warm);
+  padding: 10px var(--page-pad);
+  font-family: var(--font-serif);
+  font-size: 12px;
+  color: var(--text-on-peach);
+  text-align: center;
+  flex-shrink: 0;
+}

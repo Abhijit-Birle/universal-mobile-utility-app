@@ -1,0 +1,296 @@
+/* ─── Insights + Today clay styles ─────────────────────────────────────── */
+
+/* ── Today header card (lavender) ───────────────────────────────────────── */
+.today-header-card {
+  background: var(--clay-lavender);
+  border-radius: var(--card-radius);
+  box-shadow: var(--shadow-card);
+  padding: 20px;
+  transition: background 0.25s;
+}
+
+.today-date-label {
+  font-family: var(--font-serif);
+  font-size: 13px;
+  color: var(--text-on-lavender);
+  margin-bottom: 6px;
+  opacity: 0.8;
+}
+
+.today-amount-big {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 38px;
+  font-weight: 500;
+  color: var(--text-on-lavender);
+  line-height: 1;
+  letter-spacing: -0.02em;
+  margin-bottom: 6px;
+}
+
+.today-amount-label {
+  font-family: var(--font-serif);
+  font-size: 13px;
+  color: var(--text-on-lavender);
+  opacity: 0.75;
+}
+
+/* ── Two-column mini stat cards ─────────────────────────────────────────── */
+.stat-grid-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--gap);
+}
+
+.stat-mini-card {
+  border-radius: var(--card-radius-sm);
+  box-shadow: var(--shadow-card-sm);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  transition: background 0.25s;
+}
+
+.stat-mini-icon {
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  border: 1.5px solid rgba(0,0,0,0.15);
+  flex-shrink: 0;
+}
+
+.stat-mini-value {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 26px;
+  font-weight: 500;
+  line-height: 1.1;
+}
+
+.stat-mini-label {
+  font-family: var(--font-serif);
+  font-size: 11px;
+  letter-spacing: 0.3px;
+}
+
+/* ── Today tasks card (white) ───────────────────────────────────────────── */
+.today-tasks-card {
+  background: var(--bg-card);
+  border-radius: var(--card-radius);
+  box-shadow: var(--shadow-card);
+  padding: 0;
+  overflow: hidden;
+  transition: background 0.25s;
+}
+
+.today-tasks-header {
+  padding: 14px 18px 10px;
+  border-bottom: 1px solid var(--divider);
+}
+
+.today-tasks-title {
+  font-family: var(--font-serif);
+  font-size: 11px;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.today-task-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 18px;
+  border-bottom: 1px solid var(--divider);
+  cursor: pointer;
+  transition: background 0.1s;
+}
+.today-task-row:last-child { border-bottom: none; }
+.today-task-row:active { background: var(--bg-card-2); }
+
+.today-task-check {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 1.5px solid var(--divider-strong);
+  flex-shrink: 0;
+  cursor: pointer;
+  background: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s;
+  min-height: 0;
+  min-width: 0;
+  padding: 12px;
+  margin: -12px;
+  margin-right: -2px;
+}
+
+.today-task-check.done {
+  background: var(--text-muted);
+  border-color: var(--text-muted);
+}
+
+.today-task-title {
+  font-family: var(--font-serif);
+  font-size: 14px;
+  color: var(--text-primary);
+  flex: 1;
+}
+.today-task-title.done { text-decoration: line-through; color: var(--text-muted); }
+
+/* ── Recurring cards (2-column) ─────────────────────────────────────────── */
+.recurring-card {
+  border-radius: var(--card-radius-sm);
+  box-shadow: var(--shadow-card-sm);
+  padding: 16px;
+  cursor: pointer;
+  transition: transform 0.12s, background 0.25s;
+  min-height: 0;
+}
+.recurring-card:active { transform: scale(0.97); }
+
+.recurring-card-icon {
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  border: 1.5px solid rgba(0,0,0,0.15);
+  flex-shrink: 0;
+  margin-bottom: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.recurring-card-label {
+  font-family: var(--font-serif);
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.recurring-card-amount {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 16px;
+  font-weight: 500;
+  margin-bottom: 2px;
+}
+
+.recurring-card-date {
+  font-family: var(--font-serif);
+  font-size: 11px;
+  opacity: 0.7;
+}
+
+/* ── Insights sections ──────────────────────────────────────────────────── */
+.insight-card {
+  background: var(--bg-card);
+  border-radius: var(--card-radius);
+  box-shadow: var(--shadow-card);
+  padding: var(--card-pad);
+  transition: background 0.25s;
+}
+
+.insight-section-label {
+  font-family: var(--font-serif);
+  font-size: 11px;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  font-weight: 500;
+  margin-bottom: 12px;
+}
+
+/* Progress labels */
+.progress-labels {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+.progress-label-left {
+  font-family: var(--font-serif);
+  font-size: 14px;
+  color: var(--text-primary);
+  font-weight: 500;
+}
+.progress-label-right {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+}
+
+/* Streak */
+.streak-display { display: flex; align-items: center; gap: 12px; padding: 8px 0; }
+.streak-number {
+  font-family: var(--font-mono);
+  font-size: 44px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-primary);
+  line-height: 1;
+}
+.streak-label {
+  font-family: var(--font-serif);
+  font-size: 14px;
+  color: var(--text-secondary);
+  line-height: 1.3;
+}
+
+/* Recurring rows */
+.recurring-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 0;
+  border-bottom: 1px solid var(--divider);
+}
+.recurring-row:last-child { border-bottom: none; }
+.recurring-row-label {
+  font-family: var(--font-serif);
+  font-size: 13px;
+  color: var(--text-primary);
+  flex: 1;
+}
+.recurring-row-date {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.recurring-row-date.overdue { color: var(--priority-high); }
+
+/* Linked rows */
+.linked-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--divider);
+}
+.linked-row:last-child { border-bottom: none; }
+.linked-row-title { font-family: var(--font-serif); font-size: 13px; color: var(--text-primary); flex: 1; }
+.linked-row-amount { font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-size: 13px; color: var(--text-secondary); }
+
+/* Runway savings display */
+.runway-big {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 32px;
+  font-weight: 500;
+  color: var(--text-on-sage);
+  line-height: 1;
+  letter-spacing: -0.02em;
+}
+.runway-suffix {
+  font-family: var(--font-serif);
+  font-size: 14px;
+  color: var(--text-on-sage);
+  opacity: 0.8;
+  margin-left: 4px;
+}

@@ -44,16 +44,26 @@ const iconMap = {
   stop: Lucide.Square,
   moon: Lucide.Moon,
   sun: Lucide.Sun,
+  bell: Lucide.Bell,
+  'trash-2': Lucide.Trash2,
+  'git-commit': Lucide.GitCommit,
+  'file-text': Lucide.FileText,
+  star: Lucide.Star,
+  'star-fill': Lucide.Star,
+  'list-plus': Lucide.ListPlus,
+  'sliders': Lucide.SlidersHorizontal,
 };
 
 export default function Icon({ name, size = 20, color = 'currentColor', className = '' }) {
   const LucideIcon = iconMap[name] || Lucide.CircleDashed;
+  const isFill = name && name.endsWith('-fill');
   
   return (
     <LucideIcon
       width={size}
       height={size}
       color={color}
+      fill={isFill ? color : 'none'}
       className={className}
       strokeWidth={1.6}
     />

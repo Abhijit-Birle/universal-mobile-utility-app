@@ -56,6 +56,9 @@ export function useTodos() {
           important: t.priority === 'High', // Convert old high priority to important
           myDayDate: t.date === getLocalDateString() ? getLocalDateString() : null, // If it was added today, put in My Day
           due: t.due || null,
+          dueTime: t.dueTime || null,
+          reminder: t.reminder || null,
+          reminderNotified: !!t.reminderNotified,
           note: t.note || '',
           listId: 'default',
           pomodorosCompleted: t.pomodorosCompleted || 0,
@@ -97,6 +100,9 @@ export function useTodos() {
       important: false,
       myDayDate: null,
       due: null,
+      dueTime: null,
+      reminder: null,
+      reminderNotified: false,
       note: '',
       listId: 'default',
       pomodorosCompleted: 0,

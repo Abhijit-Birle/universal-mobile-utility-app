@@ -1,8 +1,11 @@
 import { useState, useMemo } from 'react';
 import Icon from '../components/ui/Icon.jsx';
 import TaskEditor from '../components/todos/TaskEditor.jsx';
-import { useTodos } from '../hooks/useTodos.js';
+import { useTodos, generateId } from '../hooks/useTodos.js';
 import { getLocalDateString } from '../utils/date.js';
+import DatePicker from '../components/ui/DatePicker.jsx';
+import TimePicker from '../components/ui/TimePicker.jsx';
+import ReminderPicker from '../components/ui/ReminderPicker.jsx';
 
 export default function TodoTab({ theme, NeoSurface, NeoInput, PrimaryButton, SectionLabel, fontDisplay, fontBody }) {
   const {
@@ -13,6 +16,12 @@ export default function TodoTab({ theme, NeoSurface, NeoInput, PrimaryButton, Se
   const [currentList, setCurrentList] = useState('myday');
   const [editorTask, setEditorTask] = useState(null);
   const [quickAddText, setQuickAddText] = useState('');
+  
+  const [showQuickAddExtras, setShowQuickAddExtras] = useState(false);
+  const [quickAddDue, setQuickAddDue] = useState('');
+  const [quickAddDueTime, setQuickAddDueTime] = useState('');
+  const [quickAddReminder, setQuickAddReminder] = useState('');
+  const [quickAddSubtasks, setQuickAddSubtasks] = useState([]);
   
   const todayStr = getLocalDateString();
 
@@ -42,7 +51,13 @@ export default function TodoTab({ theme, NeoSurface, NeoInput, PrimaryButton, Se
   const handleQuickAdd = () => {
     if (!quickAddText.trim()) return;
     
-    const newTask = { text: quickAddText.trim() };
+    const newTask = { 
+      text: quickAddText.trim(),
+      due: quickAddDue || null,
+      dueTime: quickAddDueTime || null,
+      reminder: quickAddReminder || null,
+      subtasks: quickAddSubtasks.filter(s => s.text.trim().length > 0)
+    };
     if (currentList === 'myday') {
       newTask.myDayDate = todayStr;
       newTask.listId = 'default';
@@ -60,6 +75,11 @@ export default function TodoTab({ theme, NeoSurface, NeoInput, PrimaryButton, Se
 
     addTodo(newTask);
     setQuickAddText('');
+    setQuickAddDue('');
+    setQuickAddDueTime('');
+    setQuickAddReminder('');
+    setQuickAddSubtasks([]);
+    setShowQuickAddExtras(false);
   };
 
   const handleAddCustomList = () => {
@@ -112,9 +132,17 @@ export default function TodoTab({ theme, NeoSurface, NeoInput, PrimaryButton, Se
               <Icon name="sun" size={10} color="#ffb648" /> My Day
             </span>
           )}
-          {t.due && (
+          {(t.due || t.dueTime) && (
             <span style={{ fontSize: 11, color: theme.accent2, display: 'flex', alignItems: 'center', gap: 4, ...fontBody }}>
-              <Icon name="calendar" size={10} /> {t.due === todayStr ? 'Today' : t.due}
+              <Icon name="calendar" size={10} /> 
+              {t.due ? (t.due === todayStr ? 'Today' : t.due) : ''}
+              {t.due && t.dueTime ? ' ' : ''}
+              {t.dueTime || ''}
+            </span>
+          )}
+          {t.reminder && (
+            <span style={{ fontSize: 11, color: theme.accent, display: 'flex', alignItems: 'center', gap: 4, ...fontBody }}>
+              <Icon name="bell" size={10} />
             </span>
           )}
           {t.subtasks && t.subtasks.length > 0 && (
@@ -224,33 +252,106 @@ export default function TodoTab({ theme, NeoSurface, NeoInput, PrimaryButton, Se
       </div>
 
       {/* Quick Add Bar */}
-      <div style={{ 
-        position: 'fixed', bottom: 0, left: 0, width: '100%', 
-        padding: '16px 18px 32px', 
-        background: `linear-gradient(to top, ${theme.bg} 80%, transparent)`,
-        display: 'flex', alignItems: 'center', gap: 12, zIndex: 10
-      }}>
-        <div style={{ flex: 1, position: 'relative' }}>
-          <NeoSurface pressed style={{ padding: '4px 8px', borderRadius: 24, display: 'flex', alignItems: 'center' }}>
-            <button 
-              onClick={handleQuickAdd}
-              style={{ width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', color: theme.accent, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
-            >
-              <Icon name="plus" size={20} />
-            </button>
-            <input 
-              type="text"
-              placeholder={`Add a task to "${activeListMeta.name}"`}
-              value={quickAddText}
-              onChange={(e) => setQuickAddText(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleQuickAdd()}
-              style={{ 
-                flex: 1, background: 'transparent', border: 'none', 
-                color: theme.textPrimary, fontSize: 15, padding: '8px 12px', 
-                outline: 'none', ...fontBody 
-              }}
-            />
-          </NeoSurface>
+      <div style={{ position: 'fixed', bottom: 0, left: 0, width: '100%', zIndex: 10 }}>
+        {/* Gradient fade above the bar */}
+        <div style={{ width: '100%', height: 32, background: `linear-gradient(to top, ${theme.bg}, transparent)` }} />
+        
+        {/* Solid background container */}
+        <div style={{ background: theme.bg, padding: '0 18px 32px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+          {showQuickAddExtras && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <div style={{ display: 'flex', gap: 12 }}>
+                <NeoSurface pressed style={{ flex: 1, padding: '10px 14px', borderRadius: 14, display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <DatePicker
+                    value={quickAddDue}
+                    onChange={setQuickAddDue}
+                    theme={theme}
+                    fontBody={fontBody}
+                    placeholder="Due date"
+                  />
+                </NeoSurface>
+                <NeoSurface pressed style={{ flex: 1, padding: '10px 14px', borderRadius: 14, display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <TimePicker
+                    value={quickAddDueTime}
+                    onChange={setQuickAddDueTime}
+                    theme={theme}
+                    fontBody={fontBody}
+                    placeholder="Due time"
+                  />
+                </NeoSurface>
+              </div>
+              <NeoSurface pressed style={{ padding: '10px 14px', borderRadius: 14, display: 'flex', alignItems: 'center', gap: 8 }}>
+                <ReminderPicker
+                  value={quickAddReminder}
+                  onChange={setQuickAddReminder}
+                  theme={theme}
+                  fontBody={fontBody}
+                  placeholder="Set reminder"
+                />
+              </NeoSurface>
+              {quickAddSubtasks.map((st, i) => (
+                <NeoSurface pressed key={st.id} style={{ padding: '10px 14px', borderRadius: 14, display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <Icon name="git-commit" size={16} color={st.text ? theme.accent : theme.textSecondary} />
+                  <input 
+                    type="text"
+                    placeholder={`Subtask ${i + 1}`}
+                    value={st.text}
+                    onChange={(e) => {
+                      const next = [...quickAddSubtasks];
+                      next[i].text = e.target.value;
+                      setQuickAddSubtasks(next);
+                    }}
+                    style={{ flex: 1, width: '100%', background: 'transparent', border: 'none', color: st.text ? theme.accent : theme.textPrimary, fontSize: 14, outline: 'none', ...fontBody }}
+                  />
+                  <button 
+                    onClick={() => setQuickAddSubtasks(prev => prev.filter((_, idx) => idx !== i))}
+                    style={{ background: 'none', border: 'none', color: theme.textSecondary, cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center' }}
+                  >
+                    <Icon name="trash-2" size={14} />
+                  </button>
+                </NeoSurface>
+              ))}
+              {quickAddSubtasks.length < 5 && (
+                <button 
+                  onClick={() => setQuickAddSubtasks(p => [...p, { id: generateId(), text: '', done: false }])}
+                  style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 8px', background: 'none', border: 'none', color: theme.textSecondary, cursor: 'pointer', fontSize: 13, alignSelf: 'flex-start', ...fontBody }}
+                >
+                  <Icon name="plus" size={14} /> Add subtask
+                </button>
+              )}
+            </div>
+          )}
+          
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div style={{ flex: 1, position: 'relative' }}>
+              <NeoSurface pressed style={{ padding: '4px 8px', borderRadius: 24, display: 'flex', alignItems: 'center' }}>
+                <button 
+                  onClick={handleQuickAdd}
+                  style={{ width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', color: theme.accent, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+                >
+                  <Icon name="list-plus" size={20} />
+                </button>
+                <input 
+                  type="text"
+                  placeholder={`Add a task to "${activeListMeta.name}"`}
+                  value={quickAddText}
+                  onChange={(e) => setQuickAddText(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && handleQuickAdd()}
+                  style={{ 
+                    flex: 1, background: 'transparent', border: 'none', 
+                    color: theme.textPrimary, fontSize: 15, padding: '8px 12px', 
+                    outline: 'none', ...fontBody 
+                  }}
+                />
+                <button 
+                  onClick={() => setShowQuickAddExtras(!showQuickAddExtras)}
+                  style={{ width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', color: showQuickAddExtras || quickAddDue || quickAddReminder ? theme.accent : theme.textSecondary, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+                >
+                  <Icon name="sliders" size={18} />
+                </button>
+              </NeoSurface>
+            </div>
+          </div>
         </div>
       </div>
 

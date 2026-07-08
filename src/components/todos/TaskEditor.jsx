@@ -1,6 +1,9 @@
 import { useState, useEffect } from 'react';
 import Icon from '../ui/Icon.jsx';
 import { getLocalDateString } from '../../utils/date.js';
+import DatePicker from '../ui/DatePicker.jsx';
+import TimePicker from '../ui/TimePicker.jsx';
+import ReminderPicker from '../ui/ReminderPicker.jsx';
 
 export default function TaskEditor({
   task,
@@ -12,6 +15,8 @@ export default function TaskEditor({
   const [text, setText] = useState(task.text || '');
   const [note, setNote] = useState(task.note || '');
   const [due, setDue] = useState(task.due || '');
+  const [dueTime, setDueTime] = useState(task.dueTime || '');
+  const [reminder, setReminder] = useState(task.reminder || '');
   const [important, setImportant] = useState(!!task.important);
   const [myDayDate, setMyDayDate] = useState(task.myDayDate || null);
   const [subtasks, setSubtasks] = useState(task.subtasks || []);
@@ -30,6 +35,8 @@ export default function TaskEditor({
       text: text.trim(),
       note: note.trim(),
       due: due || null,
+      dueTime: dueTime || null,
+      reminder: reminder || null,
       important,
       myDayDate,
       subtasks
@@ -99,22 +106,24 @@ export default function TaskEditor({
                   {step.text}
                 </span>
                 <button onClick={() => handleRemoveStep(step.id)} style={{ background: 'none', border: 'none', color: theme.textSecondary, cursor: 'pointer' }}>
-                  <Icon name="x" size={16} />
+                  <Icon name="trash-2" size={16} />
                 </button>
               </div>
             ))}
             
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-              <Icon name="plus" size={20} color={theme.accent} />
-              <input 
-                type="text" 
-                placeholder="Add step"
-                value={newStep}
-                onChange={(e) => setNewStep(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && handleAddStep()}
-                style={{ flex: 1, background: 'transparent', border: 'none', color: theme.textPrimary, fontSize: 14, outline: 'none', ...fontBody }}
-              />
-            </div>
+            {subtasks.length < 5 && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <Icon name="plus" size={20} color={theme.accent} />
+                <input 
+                  type="text" 
+                  placeholder="Add step"
+                  value={newStep}
+                  onChange={(e) => setNewStep(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && handleAddStep()}
+                  style={{ flex: 1, background: 'transparent', border: 'none', color: theme.textPrimary, fontSize: 14, outline: 'none', ...fontBody }}
+                />
+              </div>
+            )}
           </NeoSurface>
 
           {/* Add to My Day */}
@@ -125,14 +134,36 @@ export default function TaskEditor({
             </span>
           </NeoSurface>
 
-          {/* Due Date */}
+          {/* Due Date & Time */}
+          <div style={{ display: 'flex', gap: 12 }}>
+            <NeoSurface style={{ flex: 1, padding: 16, borderRadius: 16, display: 'flex', alignItems: 'center', gap: 12 }}>
+              <DatePicker
+                value={due}
+                onChange={setDue}
+                theme={theme}
+                fontBody={fontBody}
+                placeholder="Due date"
+              />
+            </NeoSurface>
+            <NeoSurface style={{ flex: 1, padding: 16, borderRadius: 16, display: 'flex', alignItems: 'center', gap: 12 }}>
+              <TimePicker
+                value={dueTime}
+                onChange={setDueTime}
+                theme={theme}
+                fontBody={fontBody}
+                placeholder="Due time"
+              />
+            </NeoSurface>
+          </div>
+
+          {/* Reminder */}
           <NeoSurface style={{ padding: 16, borderRadius: 16, display: 'flex', alignItems: 'center', gap: 12 }}>
-            <Icon name="calendar" size={20} color={due ? theme.accent : theme.textSecondary} />
-            <input 
-              type="date"
-              value={due}
-              onChange={(e) => setDue(e.target.value)}
-              style={{ flex: 1, background: 'transparent', border: 'none', color: due ? theme.accent : theme.textPrimary, fontSize: 15, outline: 'none', ...fontBody }}
+            <ReminderPicker
+              value={reminder}
+              onChange={setReminder}
+              theme={theme}
+              fontBody={fontBody}
+              placeholder="Set reminder"
             />
           </NeoSurface>
 

@@ -80,7 +80,8 @@ import {
   Gift,
   Laptop,
   Building2,
-  Box
+  Box,
+  Tag
 } from "lucide-react";
 import Strands from "./components/Strands";
 import BreathingExercise from "./components/BreathingExercise";
@@ -107,11 +108,65 @@ import {
 const EXPENSE_CATEGORIES = [
   "Food", "Transport", "Shopping", "Bills", "Entertainment", "Health", "Education", "Other",
 ];
+const EXPENSE_CSV_MAP = {
+  Transport: ['uber', 'lyft', 'taxi', 'train', 'flight', 'irctc', 'ola', 'rapido', 'metro'],
+  Food: ['swiggy', 'zomato', 'mcdonalds', 'starbucks', 'cafe', 'restaurant', 'food', 'dominos', 'kfc', 'blinkit', 'instamart', 'zepto'],
+  Shopping: ['amazon', 'flipkart', 'myntra', 'mart', 'store', 'retail', 'supermarket', 'd-mart', 'reliancemart'],
+  Entertainment: ['netflix', 'spotify', 'prime', 'cinema', 'movie', 'bookmyshow', 'pvr', 'hotstar'],
+  Health: ['hospital', 'pharmacy', 'clinic', 'medical', 'apollo', 'practo', 'netmeds', '1mg'],
+  Bills: ['electricity', 'water', 'gas', 'internet', 'broadband', 'airtel', 'jio', 'vi', 'recharge', 'emi', 'bill'],
+};
 const INCOME_CATEGORIES = ["Salary", "Freelance", "Business", "Investment", "Gift", "Other"];
 
 const TX_CATEGORY_ICONS = {
   Food: <Utensils size={18} />, Transport: <Car size={18} />, Shopping: <ShoppingCart size={18} />, Bills: <FileText size={18} />, Entertainment: <Film size={18} />, Health: <HeartPulse size={18} />, Education: <BookOpen size={18} />,
   Salary: <Briefcase size={18} />, Freelance: <Laptop size={18} />, Business: <Building2 size={18} />, Investment: <TrendingUp size={18} />, Gift: <Gift size={18} />, Other: <Box size={18} />,
+};
+
+const RENDER_CUSTOM_ICON = (key, size=18) => {
+  switch (key) {
+    case "Box": return <Box size={size} />;
+    case "Tag": return <Tag size={size} />;
+    case "ShoppingCart": return <ShoppingCart size={size} />;
+    case "Car": return <Car size={size} />;
+    case "HeartPulse": return <HeartPulse size={size} />;
+    case "BookOpen": return <BookOpen size={size} />;
+    case "Film": return <Film size={size} />;
+    case "Gift": return <Gift size={size} />;
+    case "Smartphone": return <Smartphone size={size} />;
+    case "Camera": return <Camera size={size} />;
+    case "Music2": return <Music2 size={size} />;
+    case "Dumbbell": return <Dumbbell size={size} />;
+    case "Utensils": return <Utensils size={size} />;
+    case "CreditCard": return <CreditCard size={size} />;
+    case "Target": return <Target size={size} />;
+    case "Award": return <Award size={size} />;
+    case "Wallet": return <Wallet size={size} />;
+    case "Sun": return <Sun size={size} />;
+    case "Moon": return <Moon size={size} />;
+    case "Briefcase": return <Briefcase size={size} />;
+    case "DollarSign": return <DollarSign size={size} />;
+    case "User": return <User size={size} />;
+    case "Banknote": return <Banknote size={size} />;
+    case "Sparkles": return <Sparkles size={size} />;
+    case "Users": return <Users size={size} />;
+    case "Mail": return <Mail size={size} />;
+    case "Calendar": return <Calendar size={size} />;
+    case "FileText": return <FileText size={size} />;
+    case "GraduationCap": return <GraduationCap size={size} />;
+    case "Phone": return <Phone size={size} />;
+    case "Presentation": return <Presentation size={size} />;
+    case "Flag": return <Flag size={size} />;
+    case "Cloud": return <Cloud size={size} />;
+    case "MessageSquare": return <MessageSquare size={size} />;
+    case "Bell": return <Bell size={size} />;
+    case "Landmark": return <Landmark size={size} />;
+    case "Flame": return <Flame size={size} />;
+    case "Flower2": return <Flower2 size={size} />;
+    case "Laptop": return <Laptop size={size} />;
+    case "Building2": return <Building2 size={size} />;
+    default: return <Box size={size} />;
+  }
 };
 const PRESET_BANKS = [
   { name: "HDFC", color: "#004B8D" },
@@ -218,7 +273,7 @@ function Numpad({ value, onChange, theme, NeoSurface }) {
 
 /* ---------------------------------- root ---------------------------------- */
 
-const TAB_ORDER = ["timer", "meditation", "expense", "todo", "insights"];
+const TAB_ORDER = ["timer", "meditation", "expense", "todo"];
 
 
 const useLocalStorage = (key, initialValue) => {
@@ -480,9 +535,12 @@ export default function NeoApp() {
   const [currentSessionId, setCurrentSessionId] = useState(null);
 
   const [transactions, setTransactions] = useLocalStorage("neo_transactions", []);
+  const [customCategories, setCustomCategories] = useLocalStorage("neo_custom_categories", []);
+  const [customCategoryIcons, setCustomCategoryIcons] = useLocalStorage("neo_custom_category_icons", {});
+  const ALL_EXPENSE_CATEGORIES = [...EXPENSE_CATEGORIES, ...customCategories];
   const { todos, incrementPomodoro, toggleDone, updateTodo } = useTodos();
   const [categoryBudgets, setCategoryBudgets] = useLocalStorage("neo_categoryBudgets", {});
-  const [balances, setBalances] = useLocalStorage("neo_balances", { bank: 14250.00, cash: 340.50 });
+  const [balances, setBalances] = useLocalStorage("neo_balances", { bank: 14250.00, upi: 340.50 });
   const [upcomingBills, setUpcomingBills] = useLocalStorage("neo_upcomingBills", [
     { id: 1, name: "Netflix", amount: 649, daysLeft: 2 },
     { id: 2, name: "Electricity Bill", amount: 1450, daysLeft: 5 },
@@ -496,26 +554,33 @@ export default function NeoApp() {
   // Bank Details States
   const [banks, setBanks] = useLocalStorage("neo_banks", []);
 
-  const BankBadge = ({ method }) => {
-    if (method === "Cash" || !method) {
-      return <div style={{ fontSize: 9, fontWeight: 700, padding: "2px 6px", borderRadius: 4, background: "#10B98120", color: "#10B981", display: "inline-block" }}>CASH</div>;
+  const BankBadge = ({ tx }) => {
+    const method = tx.method;
+    let mainBadge = null;
+    if (method === "UPI" || !method) {
+      mainBadge = <div style={{ fontSize: 9, fontWeight: 700, padding: "2px 6px", borderRadius: 4, background: "#10B98120", color: "#10B981", display: "inline-block" }}>UPI</div>;
+    } else {
+      const bank = banks.find(b => String(b.id) === String(method));
+      if (bank) {
+        const preset = PRESET_BANKS.find(p => bank.bankName.toLowerCase().includes(p.name.toLowerCase())) || { color: theme.accent };
+        const shortName = bank.bankName.split(" ")[0].substring(0, 5).toUpperCase();
+        mainBadge = <div style={{ fontSize: 9, fontWeight: 700, padding: "2px 6px", borderRadius: 4, background: preset.color + "20", color: preset.color, display: "inline-block", marginLeft: 4 }}>{shortName}</div>;
+      }
     }
-    const bank = banks.find(b => String(b.id) === String(method));
-    if (!bank) return null;
     
-    const preset = PRESET_BANKS.find(p => bank.bankName.toLowerCase().includes(p.name.toLowerCase())) || { color: theme.accent };
-    const shortName = bank.bankName.split(" ")[0].substring(0, 5).toUpperCase();
-  
     return (
-      <div style={{ fontSize: 9, fontWeight: 700, padding: "2px 6px", borderRadius: 4, background: preset.color + "20", color: preset.color, display: "inline-block", marginLeft: 4 }}>
-        {shortName}
+      <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
+        {mainBadge}
+        {tx.paymentType && !(method === "UPI" && tx.paymentType.toUpperCase() === "UPI") && (
+          <div style={{ fontSize: 9, fontWeight: 700, padding: "2px 6px", borderRadius: 4, background: theme.textSecondary + "20", color: theme.textSecondary, display: "inline-block" }}>{tx.paymentType.toUpperCase()}</div>
+        )}
       </div>
     );
   };
 
   const updateBalanceForMethod = (method, delta) => {
-    if (method === "Cash") {
-      setBalances(prev => ({ ...prev, cash: (Number(prev.cash) || 0) + delta }));
+    if (method === "UPI") {
+      setBalances(prev => ({ ...prev, upi: (Number(prev.upi) || 0) + delta }));
     } else {
       setBanks(prev => prev.map(b => String(b.id) === String(method) ? { ...b, balance: (Number(b.balance) || 0) + delta } : b));
     }
@@ -523,6 +588,21 @@ export default function NeoApp() {
   const [showBanksList, setShowBanksList] = useState(false);
   const [showBankForm, setShowBankForm] = useState(false);
   const [editingBankId, setEditingBankId] = useState(null);
+  
+  const [showCategoryForm, setShowCategoryForm] = useState(false);
+  const [showManageCategories, setShowManageCategories] = useState(false);
+  const [showCalendarWidget, setShowCalendarWidget] = useState(false);
+  const [newCategoryName, setNewCategoryName] = useState("");
+  const [newCategoryIcon, setNewCategoryIcon] = useState("Box");
+  const ICON_OPTIONS = [
+    "Box", "Tag", "ShoppingCart", "Car", "HeartPulse", "BookOpen", "Film", "Gift", 
+    "Smartphone", "Camera", "Music2", "Dumbbell", "Utensils", "CreditCard", "Target", "Award",
+    "Wallet", "Sun", "Moon", "Briefcase", "DollarSign", "User", "Banknote", "Sparkles", 
+    "Users", "Mail", "Calendar", "FileText", "GraduationCap", "Phone", "Presentation", "Flag", 
+    "Cloud", "MessageSquare", "Bell", "Landmark", "Flame", "Flower2", "Laptop", "Building2"
+  ];
+  
+
   const [bankFormState, setBankFormState] = useState({
     bankName: "", balance: "", accountType: "Savings", cardLast4: "", cardType: "Debit"
   });
@@ -559,7 +639,7 @@ export default function NeoApp() {
   const [newDate, setNewDate] = useState(getLocalToday());
   const [newTime, setNewTime] = useState(getLocalTime());
   const [showCategoryDrawer, setShowCategoryDrawer] = useState(false);
-  const [newMethod, setNewMethod] = useState("Cash");
+  const [newMethod, setNewMethod] = useState("UPI");
   const [editingTxId, setEditingTxId] = useState(null);
   const [activeAccount, setActiveAccount] = useState("bank");
   const [showBudgetModal, setShowBudgetModal] = useState(false);
@@ -646,10 +726,27 @@ export default function NeoApp() {
   const [showKeyModal, setShowKeyModal] = useState(false);
   const [apiKey, setApiKey] = useState("");
   const [direction, setDirection] = useState(1);
-  const [showSearch, setShowSearch] = useState(false);
+  const [showInsights, setShowInsights] = useState(false);
   const [showWidget, setShowWidget] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [showRuleModal, setShowRuleModal] = useState(false);
+  const [showCsvModal, setShowCsvModal] = useState(false);
+  const [csvFile, setCsvFile] = useState(null);
+  const [csvPreview, setCsvPreview] = useState([]);
+  const [csvHeaders, setCsvHeaders] = useState([]);
+  const [colMap, setColMap] = useState({ date: "", amount: "", deposit: "", balance: "", desc: "", type: "" });
+  const [showWipeConfirm, setShowWipeConfirm] = useState(false);
+  const [toastMessage, setToastMessage] = useState("");
+
+  useEffect(() => {
+    if (toastMessage) {
+      const timer = setTimeout(() => setToastMessage(""), 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [toastMessage]);
+
   const [syncState, setSyncState] = useState("synced"); // synced | syncing
+  const [customCategoryRules, setCustomCategoryRules] = useLocalStorage("neo_custom_category_rules", []);
   const touchData = useRef({ x: 0, y: 0, active: false });
 
   // Handle Hardware Back Button (Android)
@@ -665,8 +762,9 @@ export default function NeoApp() {
         if (showNoteModal) { setShowNoteModal(false); return; }
         if (showDailyGoalModal) { setShowDailyGoalModal(false); return; }
         if (showSettings) { setShowSettings(false); return; }
+        if (showCsvModal) { setShowCsvModal(false); setCsvFile(null); setCsvPreview([]); return; }
         if (showKeyModal) { setShowKeyModal(false); return; }
-        if (showSearch) { setShowSearch(false); return; }
+        if (showInsights) { setShowInsights(false); return; }
 
         // If no modal is open, exit the app
         CapacitorApp.exitApp();
@@ -677,7 +775,7 @@ export default function NeoApp() {
     return () => {
       if (listener) listener.remove();
     };
-  }, [showForm, showBudgetModal, showBudgetDropdown, showBanksList, showCategoryDrawer, showNoteModal, showDailyGoalModal, showSettings, showKeyModal, showSearch]);
+  }, [showForm, showBudgetModal, showBudgetDropdown, showBanksList, showCategoryDrawer, showNoteModal, showDailyGoalModal, showSettings, showCsvModal, showKeyModal, showInsights]);
 
   const switchTab = (newTab) => {
     if (newTab === activeTab) return;
@@ -1581,14 +1679,16 @@ export default function NeoApp() {
 
 
   const renderExpenseTab = () => {
+
+
     const methodIcon = (m) => {
       if (!m) return null;
-      if (m === "Cash") return <Banknote size={14} />;
+      if (m === "UPI") return <Smartphone size={14} />;
       return <Landmark size={14} />;
     };
     const methodLabel = (m) => {
       if (!m) return "";
-      if (m === "Cash") return "Cash";
+      if (m === "UPI") return "UPI";
       const bank = banks.find(b => String(b.id) === String(m));
       return bank ? bank.bankName : "Bank";
     };
@@ -1744,7 +1844,7 @@ export default function NeoApp() {
       setNewAmount(tx.originalAmount ? tx.originalAmount.toString() : tx.amount.toString());
       setNewDesc(tx.name || tx.desc || "");
       setNewCat(tx.category || "Food");
-      setNewMethod(tx.method || "Cash");
+      setNewMethod(tx.method || "UPI");
       setNewDate(tx.date === "Today" || !tx.date ? getLocalToday() : tx.date);
       setNewTime(tx.time || getLocalTime());
       setNewCurrency(tx.originalCurrency || "");
@@ -1848,7 +1948,7 @@ export default function NeoApp() {
                   marginBottom: 8
                 }}
               >
-                <option value="Cash">Cash</option>
+                <option value="UPI">UPI</option>
                 {banks.map(b => (
                   <option key={b.id} value={b.id}>{b.bankName}</option>
                 ))}
@@ -1859,7 +1959,7 @@ export default function NeoApp() {
 
               <div style={{ fontSize: 11, fontWeight: 700, color: theme.textSecondary, marginTop: 12, marginBottom: 8 }}>CATEGORY</div>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12, marginBottom: 20 }}>
-                {(newType === "expense" ? EXPENSE_CATEGORIES : INCOME_CATEGORIES).map(c => (
+                {(newType === "expense" ? ALL_EXPENSE_CATEGORIES : INCOME_CATEGORIES).map(c => (
                   <div
                     key={c}
                     onClick={() => setNewCat(c)}
@@ -1878,13 +1978,26 @@ export default function NeoApp() {
                     }}
                   >
                     <div style={{ fontSize: 24, marginBottom: 4 }}>
-                      {TX_CATEGORY_ICONS[c] || "📦"}
+                      {TX_CATEGORY_ICONS[c] || (customCategoryIcons[c] ? RENDER_CUSTOM_ICON(customCategoryIcons[c], 18) : <Box size={18} />)}
                     </div>
                     <div style={{ fontSize: 11, fontWeight: 700, ...fontBody, textAlign: "center", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", width: "100%", color: newCat === c ? "#fff" : theme.textSecondary }}>
                       {c}
                     </div>
                   </div>
                 ))}
+                
+                {newType === "expense" && (
+                  <div
+                    onClick={() => setShowCategoryForm(true)}
+                    style={{
+                      display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 6,
+                      cursor: "pointer", padding: "16px 8px", borderRadius: 16, background: theme.bg, boxShadow: theme.shadowRaisedSm, transition: "all 0.2s"
+                    }}
+                  >
+                    <div style={{ fontSize: 24, marginBottom: 4, color: theme.textSecondary }}><Plus size={22} /></div>
+                    <div style={{ fontSize: 11, fontWeight: 700, ...fontBody, textAlign: "center", color: theme.textSecondary }}>Add New</div>
+                  </div>
+                )}
               </div>
 
               <PrimaryButton label={editingTxId ? "Save Changes" : "Add transaction"} icon={<Check size={18} />} onClick={() => {
@@ -2007,16 +2120,19 @@ export default function NeoApp() {
                 );
               })()}
 
-              {/* Cash card — icon opens edit-balance modal */}
-              {(() => {
-                const acc = { id: "cash", label: "Cash", icon: Wallet2, balance: balances.cash };
-                return (
-                  <NeoSurface onClick={() => { 
-                      setActiveAccount("cash"); 
+              {/* UPI card — icon opens edit-balance modal */}
+              <NeoSurface
+                onClick={(e) => {
+                  const acc = { id: "upi", label: "UPI", icon: Smartphone, balance: balances.upi };
+                  if (e.target.closest('.edit-btn')) {
+                    handleEditBalance(acc);
+                  } else {
+                      setActiveAccount("upi"); 
                       setEditingBalanceAcc(acc);
                       setTempBalance(acc.balance.toString());
                       setShowEditBalanceModal(true);
-                    }} pressed={activeAccount === "cash"} style={{ minWidth: 145, flex: 1, padding: "20px", cursor: "pointer", borderRadius: 20, position: "relative" }}>
+                  }
+                }} pressed={activeAccount === "upi"} style={{ minWidth: 145, flex: 1, padding: "20px", cursor: "pointer", borderRadius: 20, position: "relative" }}>
                     <div
                       style={{
                         width: 44, height: 44, borderRadius: "50%", background: theme.bg,
@@ -2024,15 +2140,13 @@ export default function NeoApp() {
                         marginBottom: 16, color: theme.accent
                       }}
                     >
-                      <Wallet2 size={18} strokeWidth={2.5} />
+                      <Smartphone size={18} strokeWidth={2.5} />
                     </div>
                     <div>
-                      <div style={{ color: theme.textSecondary, fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 4, ...fontBody }}>Cash</div>
-                      <div style={{ color: theme.textPrimary, fontSize: 24, fontWeight: 700, ...fontDisplay }}>{formatCurrency(balances.cash, baseCurrency)}</div>
+                      <div style={{ color: theme.textSecondary, fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 4, ...fontBody }}>UPI</div>
+                      <div style={{ color: theme.textPrimary, fontSize: 24, fontWeight: 700, ...fontDisplay }}>{formatCurrency(balances.upi || 0, baseCurrency)}</div>
                     </div>
                   </NeoSurface>
-                );
-              })()}
             </div>
 
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 8, marginBottom: 32 }}>
@@ -2042,7 +2156,12 @@ export default function NeoApp() {
                   {formatCurrency(spentThisMonth, baseCurrency)}
                 </div>
               </div>
-              <PrimaryButton icon={<Plus size={16} strokeWidth={2.5} />} label="New" onClick={() => setShowForm(true)} style={{ padding: "12px 24px", borderRadius: 16, fontSize: 15 }} />
+              <div style={{ display: "flex", gap: 12 }}>
+                <NeoSurface onClick={() => setShowCsvModal(true)} style={{ display: "flex", alignItems: "center", justifyContent: "center", width: 44, height: 44, borderRadius: 16, cursor: "pointer", color: theme.accent }}>
+                  <Upload size={18} strokeWidth={2.5} />
+                </NeoSurface>
+                <PrimaryButton icon={<Plus size={16} strokeWidth={2.5} />} label="New" onClick={() => setShowForm(true)} style={{ padding: "12px 24px", borderRadius: 16, fontSize: 15 }} />
+              </div>
             </div>
 
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
@@ -2086,12 +2205,12 @@ export default function NeoApp() {
                   <SwipeRow key={t.id} onDelete={() => deleteTx(t.id)}>
                     <NeoSurface style={{ padding: 16, display: "flex", alignItems: "center", gap: 14, borderRadius: 20 }}>
                       <div style={{ width: 40, height: 40, borderRadius: 12, background: isExp ? `${theme.danger}15` : `${theme.success}15`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18 }}>
-                        {TX_CATEGORY_ICONS[t.category] || "📦"}
+                        {TX_CATEGORY_ICONS[t.category] || (customCategoryIcons[t.category] ? RENDER_CUSTOM_ICON(customCategoryIcons[t.category], 18) : <Box size={18} />)}
                       </div>
                       <div style={{ flex: 1 }}>
                         <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 2 }}>
                           <div style={{ color: theme.textPrimary, fontSize: 14, fontWeight: 700, ...fontBody }}>{t.category}</div>
-                          <BankBadge method={t.method} />
+                          <BankBadge tx={t} />
                         </div>
                         <div style={{ color: theme.textSecondary, fontSize: 11, ...fontBody }}>{t.desc} • {t.date}</div>
                       </div>
@@ -2161,47 +2280,56 @@ export default function NeoApp() {
               </div>
             </div>
 
-            <div style={{ marginTop: 20 }}>
-              <SectionLabel>Calendar</SectionLabel>
-              <NeoSurface style={{ padding: 16 }}>
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
-                  <IconBtn size={32} icon={<ChevronLeft size={15} />} onClick={() => setMonthOffset((m) => m - 1)} />
-                  <div style={{ color: theme.textPrimary, fontWeight: 700, fontSize: 13.5, ...fontDisplay }}>{monthLabel}</div>
-                  <IconBtn size={32} icon={<ChevronRight size={15} />} onClick={() => setMonthOffset((m) => m + 1)} />
-                </div>
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(7,1fr)", gap: 6 }}>
-                  {["S", "M", "T", "W", "T", "F", "S"].map((d, i) => (
-                    <div key={i} style={{ textAlign: "center", fontSize: 10, color: theme.textSecondary, ...fontBody }}>{d}</div>
-                  ))}
-                  {Array.from({ length: 3 }).map((_, i) => <div key={"pad" + i} />)}
-                  {Array.from({ length: daysInMonth }).map((_, i) => {
-                    const day = i + 1;
-                    const has = txByDay[day] || [];
-                    const isSelected = selectedDate === day;
+            <div style={{ marginTop: 20, marginBottom: showCalendarWidget ? 20 : 0 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: showCalendarWidget ? 12 : 0 }}>
+                <SectionLabel style={{ margin: 0 }}>Calendar</SectionLabel>
+                <button onClick={() => setShowCalendarWidget(!showCalendarWidget)} style={{ background: theme.bg, color: theme.textSecondary, border: "none", padding: "8px 12px", borderRadius: 12, boxShadow: showCalendarWidget ? theme.shadowInset : theme.shadowRaisedSm, fontWeight: 600, fontSize: 12, ...fontBody, cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}>
+                  <Calendar size={14} />
+                  {showCalendarWidget ? "Hide Calendar" : "Show Calendar"}
+                </button>
+              </div>
 
-                    const dailyExpense = has.filter(t => t.type === 'expense').reduce((sum, t) => sum + t.amount, 0);
-                    const isPastOrPresent = monthOffset < 0 || (monthOffset === 0 && day <= now.getDate());
+              {showCalendarWidget && (
+                <NeoSurface style={{ padding: 16 }}>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+                    <IconBtn size={32} icon={<ChevronLeft size={15} />} onClick={() => setMonthOffset((m) => m - 1)} />
+                    <div style={{ color: theme.textPrimary, fontWeight: 700, fontSize: 13.5, ...fontDisplay }}>{monthLabel}</div>
+                    <IconBtn size={32} icon={<ChevronRight size={15} />} onClick={() => setMonthOffset((m) => m + 1)} />
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(7,1fr)", gap: 6 }}>
+                    {["S", "M", "T", "W", "T", "F", "S"].map((d, i) => (
+                      <div key={i} style={{ textAlign: "center", fontSize: 10, color: theme.textSecondary, ...fontBody }}>{d}</div>
+                    ))}
+                    {Array.from({ length: 3 }).map((_, i) => <div key={"pad" + i} />)}
+                    {Array.from({ length: daysInMonth }).map((_, i) => {
+                      const day = i + 1;
+                      const has = txByDay[day] || [];
+                      const isSelected = selectedDate === day;
 
-                    let textColor = theme.textPrimary;
-                    if (isPastOrPresent) {
-                      if (dailyExpense === 0) textColor = theme.success;
-                      else if (dailyExpense > 0) textColor = theme.danger;
-                    }
+                      const dailyExpense = has.filter(t => t.type === 'expense').reduce((sum, t) => sum + t.amount, 0);
+                      const isPastOrPresent = monthOffset < 0 || (monthOffset === 0 && day <= now.getDate());
 
-                    return (
-                      <button key={day} onClick={() => setSelectedDate(isSelected ? null : day)} style={{
-                        aspectRatio: "1", borderRadius: 10, border: "none", background: theme.bg,
-                        boxShadow: isSelected ? theme.shadowPressed : theme.shadowRaisedSm,
-                        color: isSelected ? theme.accent : textColor, fontSize: 15, fontWeight: 700, position: "relative", ...fontBody,
-                        opacity: isPastOrPresent ? 1 : 0.5
-                      }}>
-                        {day}
-                        {dailyExpense > 0 && <div style={{ position: "absolute", bottom: 4, left: "50%", transform: "translateX(-50%)", width: 4, height: 4, borderRadius: "50%", background: theme.danger }} />}
-                      </button>
-                    );
-                  })}
-                </div>
-              </NeoSurface>
+                      let textColor = theme.textPrimary;
+                      if (isPastOrPresent) {
+                        if (dailyExpense === 0) textColor = theme.success;
+                        else if (dailyExpense > 0) textColor = theme.danger;
+                      }
+
+                      return (
+                        <button key={day} onClick={() => setSelectedDate(isSelected ? null : day)} style={{
+                          aspectRatio: "1", borderRadius: 10, border: "none", background: theme.bg,
+                          boxShadow: isSelected ? theme.shadowPressed : theme.shadowRaisedSm,
+                          color: isSelected ? theme.accent : textColor, fontSize: 15, fontWeight: 700, position: "relative", ...fontBody,
+                          opacity: isPastOrPresent ? 1 : 0.5
+                        }}>
+                          {day}
+                          {dailyExpense > 0 && <div style={{ position: "absolute", bottom: 4, left: "50%", transform: "translateX(-50%)", width: 4, height: 4, borderRadius: "50%", background: theme.danger }} />}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </NeoSurface>
+              )}
             </div>
 
             <div style={{ marginTop: 20 }}>
@@ -2222,7 +2350,7 @@ export default function NeoApp() {
                 </select>
                 <select value={filterBank} onChange={e => setFilterBank(e.target.value)} style={{ flex: 1, minWidth: 90, padding: "8px 12px", borderRadius: 12, background: theme.bg, color: theme.textPrimary, border: "none", boxShadow: theme.shadowInset, fontSize: 12, fontWeight: 600, outline: "none", ...fontBody }}>
                   <option value="All">All Banks</option>
-                  <option value="Cash">Cash</option>
+                  <option value="UPI">UPI</option>
                   {banks.map(b => <option key={b.id} value={b.id}>{b.bankName.substring(0, 10)}</option>)}
                 </select>
                 <div style={{ display: "flex", alignItems: "center", gap: 10, flex: 2, minWidth: 200 }}>
@@ -2252,12 +2380,12 @@ export default function NeoApp() {
                           boxShadow: theme.shadowRaisedSm, display: "flex", alignItems: "center", justifyContent: "center",
                           fontSize: 16
                         }}>
-                          {TX_CATEGORY_ICONS[t.category] || "📦"}
+                          {TX_CATEGORY_ICONS[t.category] || (customCategoryIcons[t.category] ? RENDER_CUSTOM_ICON(customCategoryIcons[t.category], 16) : <Box size={16} />)}
                         </div>
                         <div style={{ display: "flex", flexDirection: "column", gap: 3, flex: 1 }}>
                           <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                             <span style={{ color: theme.textPrimary, fontWeight: 600, fontSize: 13.5, ...fontBody }}>{t.category}</span>
-                            <BankBadge method={t.method} />
+                            <BankBadge tx={t} />
                             {t.recurring && <Repeat size={12} color={theme.textSecondary} />}
                             {t.split && <Split size={12} color={theme.accent} />}
                           </div>
@@ -2337,7 +2465,7 @@ export default function NeoApp() {
                                 }}
                               >
                                 <div style={{ width: 28, height: 28, borderRadius: 8, background: theme.accent + "1A", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14 }}>
-                                  {TX_CATEGORY_ICONS[cat] || "📦"}
+                                  {TX_CATEGORY_ICONS[cat] || (customCategoryIcons[cat] ? RENDER_CUSTOM_ICON(customCategoryIcons[cat], 14) : <Box size={14} />)}
                                 </div>
                                 {cat}
                               </button>
@@ -2725,6 +2853,17 @@ Generate one short, helpful insight about my productivity or finances based ONLY
           </div>
 
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+            {/* Profile Section */}
+            <div style={{ display: "flex", alignItems: "center", gap: 16, background: theme.bg, padding: 16, borderRadius: 16, boxShadow: theme.shadowRaisedSm, marginBottom: 8 }}>
+              <div style={{ width: 48, height: 48, borderRadius: "50%", background: `linear-gradient(135deg, ${theme.accent}, ${theme.accent2})`, display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", flexShrink: 0 }}>
+                <User size={24} />
+              </div>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 16, fontWeight: 700, color: theme.textPrimary, ...fontDisplay }}>Abhijit Birle</div>
+                <div style={{ fontSize: 13, color: theme.textSecondary, ...fontBody }}>Local User Profile</div>
+              </div>
+            </div>
+
             {/* Cloud Sync */}
             <div
               onClick={() => { setSyncState("syncing"); setTimeout(() => setSyncState("synced"), 1200); }}
@@ -2739,6 +2878,18 @@ Generate one short, helpful insight about my productivity or finances based ONLY
               ) : (
                 <div style={{ width: 8, height: 8, borderRadius: "50%", background: theme.accent2 }} />
               )}
+            </div>
+
+            {/* Manage Categories */}
+            <div
+              onClick={() => { setShowSettings(false); setShowManageCategories(true); }}
+              style={{ display: "flex", alignItems: "center", justifyContent: "space-between", background: theme.bg, padding: 16, borderRadius: 16, boxShadow: theme.shadowRaisedSm, cursor: "pointer" }}
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                <Tag size={18} color={theme.textPrimary} />
+                <span style={{ fontSize: 15, fontWeight: 600, color: theme.textPrimary, ...fontBody }}>Manage Categories</span>
+              </div>
+              <ChevronDown size={16} color={theme.textSecondary} style={{ transform: "rotate(-90deg)" }} />
             </div>
 
             {/* Widget Preview */}
@@ -2774,63 +2925,402 @@ Generate one short, helpful insight about my productivity or finances based ONLY
                 ))}
               </select>
             </div>
+            
+            {/* Custom Category Rules */}
+            <div style={{ background: theme.bg, padding: 16, borderRadius: 16, boxShadow: theme.shadowRaisedSm }}>
+              <div style={{ fontSize: 15, fontWeight: 600, color: theme.textPrimary, ...fontDisplay, marginBottom: 12 }}>Custom Category Rules</div>
+              
+              {customCategoryRules.length === 0 && (
+                 <div style={{ fontSize: 12, color: theme.textSecondary, marginBottom: 12 }}>Add rules to auto-categorize CSV imports.</div>
+              )}
+              
+              {customCategoryRules.map((rule, idx) => (
+                <div key={idx} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                  <span style={{ fontSize: 13, color: theme.textSecondary, flex: 1 }}>"{rule.keyword}" &rarr; <b style={{color: theme.textPrimary}}>{rule.category}</b></span>
+                  <button onClick={() => setCustomCategoryRules(prev => prev.filter((_, i) => i !== idx))} style={{ background: "none", border: "none", color: theme.danger, cursor: "pointer" }}><X size={14} /></button>
+                </div>
+              ))}
+              
+              <button onClick={() => setShowRuleModal(true)} style={{ width: "100%", background: theme.accent, color: "#fff", border: "none", borderRadius: 8, padding: "12px", cursor: "pointer", fontWeight: 600, ...fontBody, marginTop: 8 }}>
+                Add Custom Rule
+              </button>
+            </div>
+            
+            {/* Wipe Data */}
+            <div
+              onClick={() => setShowWipeConfirm(true)}
+              style={{ display: "flex", alignItems: "center", justifyContent: "center", background: "#ff4d4d", padding: 16, borderRadius: 16, boxShadow: theme.shadowRaisedSm, cursor: "pointer", marginTop: 8 }}
+            >
+              <span style={{ fontSize: 15, fontWeight: 700, color: "#fff", ...fontBody }}>Wipe Transactions Data</span>
+            </div>
           </div>
         </NeoSurface>
       </div>
     );
   }
 
-  /* ---------------------------------- GLOBAL SEARCH ---------------------------------- */
+  /* ---------------------------------- CSV IMPORT MODAL ---------------------------------- */
 
-  function SearchOverlay() {
-    const [searchQuery, setSearchQuery] = useState("");
-    const q = searchQuery.trim().toLowerCase();
+  function CsvImportModalComponent() {
+    const [selectedAccount, setSelectedAccount] = useState(banks.length > 0 ? String(banks[0].id) : "UPI");
 
-    // We recreate searchIndex here so it has the latest baseCurrency
-    const searchIndexData = [
-      ...transactions.map(t => ({ type: "expense", icon: t.type === 'expense' ? ShoppingCart : Landmark, label: t.name, meta: `${formatCurrency(t.amount, baseCurrency)} · ${t.date}`, item: t })),
-      ...todos.map(t => ({ type: "todo", icon: FileText, label: t.text, meta: `${t.priority} priority`, item: t })),
-      ...history.map(h => ({ type: "session", icon: TimerIcon, label: h.note || h.type, meta: `${h.minutes}m · ${h.date}`, item: h }))
-    ];
+    const handleCsvFileSelect = (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      setCsvFile(file);
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const text = event.target.result;
+        let lines = [];
+        
+        // HDFC and other Indian banks often export HTML tables disguised as .xls files
+        if (text.toLowerCase().includes("<table") || text.toLowerCase().includes("<html")) {
+          const doc = new DOMParser().parseFromString(text, "text/html");
+          const rows = Array.from(doc.querySelectorAll("tr"));
+          lines = rows.map(tr => {
+            return Array.from(tr.querySelectorAll("td, th"))
+              .map(td => td.innerText.replace(/,/g, ' ').replace(/\n/g, ' ').trim())
+              .join(",");
+          }).filter(line => line.trim() !== "");
+        } else {
+          lines = text.split(/\r?\n/).filter(line => line.trim() !== "");
+        }
+        
+        if (lines.length > 0) {
+          let delimiter = ",";
+          let maxCols = 0;
+          let headerIndex = 0;
+          
+          for (let i = 0; i < Math.min(lines.length, 30); i++) {
+             const cleanL = lines[i].replace(/"([^"]*)"/g, (m, p1) => p1.replace(/,/g, ' '));
+             for (const delim of [",", "\t", ";"]) {
+                 const cols = cleanL.split(delim);
+                 if (cols.length > maxCols) {
+                     maxCols = cols.length;
+                     delimiter = delim;
+                     headerIndex = i;
+                 }
+             }
+          }
+          
+          const cleanLine = (line) => line.replace(/"([^"]*)"/g, (m, p1) => p1.replace(new RegExp(delimiter, 'g'), ' '));
+          
+          const headers = cleanLine(lines[headerIndex]).split(delimiter).map(s => s.trim());
+          setCsvHeaders(headers);
+          const preview = lines.slice(headerIndex + 1, headerIndex + 4).map(l => cleanLine(l).split(delimiter).map(s => s.trim()));
+          setCsvPreview(preview);
+          
+          const guessCol = (keywords) => {
+            const idx = headers.findIndex(h => keywords.some(k => h.toLowerCase().includes(k)));
+            return idx !== -1 ? idx.toString() : "";
+          };
+          
+          setColMap({
+            date: guessCol(['date', 'dt', 'time']),
+            amount: guessCol(['withdrawal', 'debit', 'amount', 'amt']),
+            deposit: guessCol(['deposit', 'credit']),
+            balance: guessCol(['balance', 'bal']),
+            desc: guessCol(['desc', 'narration', 'merchant', 'details', 'name', 'particulars', 'remark']),
+            type: "",
+            _delim: delimiter,
+            _headerIdx: headerIndex
+          });
+        }
+      };
+      reader.readAsText(file);
+    };
 
-    const results = q ? searchIndexData.filter((r) => r.label.toLowerCase().includes(q)) : searchIndexData;
-    const typeColor = { expense: theme.danger, todo: theme.accent, session: theme.accent2 };
+    const handleCsvImport = () => {
+      if (!csvFile || colMap.date === "" || colMap.amount === "" || colMap.desc === "") return;
+      
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const text = event.target.result;
+        let lines = [];
+        
+        if (text.toLowerCase().includes("<table") || text.toLowerCase().includes("<html")) {
+          const doc = new DOMParser().parseFromString(text, "text/html");
+          const rows = Array.from(doc.querySelectorAll("tr"));
+          lines = rows.map(tr => {
+            return Array.from(tr.querySelectorAll("td, th"))
+              .map(td => td.innerText.replace(/,/g, ' ').replace(/\n/g, ' ').trim())
+              .join(",");
+          }).filter(line => line.trim() !== "");
+        } else {
+          lines = text.split(/\r?\n/).filter(line => line.trim() !== "");
+        }
+        
+        if (lines.length < 2) return;
+        
+        const newTxs = [];
+        let totalImportAmount = 0;
+        let totalUpiAmount = 0;
+        let closingBalance = NaN;
+        let latestTimestamp = -Infinity;
+        
+        const delim = colMap._delim || ",";
+        const headerIdx = colMap._headerIdx || 0;
+        const cleanLine = (line) => line.replace(/"([^"]*)"/g, (m, p1) => p1.replace(new RegExp(delim, 'g'), ' '));
+        
+        for (let i = headerIdx + 1; i < lines.length; i++) {
+          const rawLine = lines[i];
+          if (rawLine.toUpperCase().includes("STATEMENT SUMMARY") || rawLine.toUpperCase().includes("OPENING BALANCE") || rawLine.toUpperCase().includes("END OF STATEMENT")) {
+            break;
+          }
+          const cols = cleanLine(rawLine).split(delim).map(s => s.trim());
+          const dateRaw = cols[parseInt(colMap.date)];
+          const withdrawRaw = cols[parseInt(colMap.amount)];
+          const depositRaw = colMap.deposit !== "" ? cols[parseInt(colMap.deposit)] : undefined;
+          const balRaw = colMap.balance !== "" ? cols[parseInt(colMap.balance)] : undefined;
+          const descRaw = cols[parseInt(colMap.desc)] || "Imported";
+          
+          if (!dateRaw || (!withdrawRaw && !depositRaw)) continue;
+
+          let type = "expense";
+          let amount = 0;
+
+          const wAmt = withdrawRaw ? parseFloat(withdrawRaw.replace(/[^0-9.-]/g, '')) : NaN;
+          const dAmt = depositRaw ? parseFloat(depositRaw.replace(/[^0-9.-]/g, '')) : NaN;
+
+          if (!isNaN(wAmt) && wAmt !== 0) {
+              if (colMap.deposit === "" && wAmt > 0) {
+                  type = "income";
+              } else {
+                  type = "expense";
+              }
+              amount = Math.abs(wAmt);
+          } else if (!isNaN(dAmt) && dAmt !== 0) {
+              type = "income";
+              amount = Math.abs(dAmt);
+          } else {
+              continue;
+          }
+          
+
+          const descLower = descRaw.toLowerCase();
+          let cat = "Other";
+          
+          const customMatch = customCategoryRules.find(r => descLower.includes(r.keyword.toLowerCase()));
+          if (customMatch) {
+            cat = customMatch.category;
+          } else {
+            for (const [c, keywords] of Object.entries(EXPENSE_CSV_MAP)) {
+              if (keywords.some(k => descLower.includes(k))) {
+                cat = c;
+                break;
+              }
+            }
+          }
+          
+          let formattedDate = getLocalToday();
+          let ts = NaN;
+          const dmyMatch = dateRaw.trim().match(/^(\d{2})[\/\-](\d{2})[\/\-](\d{2,4})$/);
+          let pd;
+          if (dmyMatch) {
+            const day = parseInt(dmyMatch[1], 10);
+            const month = parseInt(dmyMatch[2], 10) - 1;
+            let year = parseInt(dmyMatch[3], 10);
+            if (year < 100) year += 2000;
+            pd = new Date(year, month, day);
+          } else {
+            pd = new Date(dateRaw);
+          }
+          
+          ts = pd.getTime();
+          if (!isNaN(ts)) {
+            const yyyy = pd.getFullYear();
+            const mm = String(pd.getMonth() + 1).padStart(2, '0');
+            const dd = String(pd.getDate()).padStart(2, '0');
+            formattedDate = `${yyyy}-${mm}-${dd}`;
+          }
+          
+          if (balRaw) {
+             const bAmt = parseFloat(balRaw.replace(/[^0-9.-]/g, ''));
+             if (!isNaN(bAmt) && !isNaN(ts) && ts > latestTimestamp) {
+                latestTimestamp = ts;
+                closingBalance = bAmt;
+             }
+          }
+          let paymentType = null;
+          let method = selectedAccount;
+          if (descLower.match(/upi|vpa|@ybl|@okhdfcbank|@icici|paytm|gpay|phonepe/)) {
+            paymentType = "UPI";
+            method = "UPI";
+          } else if (descLower.match(/pos|card|debit|credit|atm/)) {
+            paymentType = "Card";
+          } else if (descLower.match(/netbanking|imps|neft|rtgs|online/)) {
+            paymentType = "Online";
+          }
+          
+          const newTx = {
+            id: Date.now() + i,
+            type: type,
+            amount: amount,
+            originalAmount: amount,
+            originalCurrency: baseCurrency,
+            exchangeRate: 1,
+            name: descRaw,
+            desc: descRaw,
+            category: cat,
+            method: method,
+            paymentType: paymentType,
+            date: formattedDate,
+            time: "12:00",
+          };
+          
+          const signedAmount = (type === "expense" ? -amount : amount);
+          totalImportAmount += signedAmount;
+          if (method === "UPI" && selectedAccount !== "UPI") {
+            totalUpiAmount += signedAmount;
+          }
+          
+          newTxs.push(newTx);
+        }
+        
+          if (newTxs.length > 0) {
+            setTransactions(prev => [...newTxs, ...prev]);
+            
+            if (!isNaN(closingBalance)) {
+              if (selectedAccount === "UPI") {
+                setBalances(prev => ({ ...prev, upi: closingBalance }));
+              } else {
+                setBanks(prevBanks => prevBanks.map(b => 
+                  String(b.id) === String(selectedAccount) ? { ...b, balance: closingBalance } : b
+                ));
+              }
+            } else {
+              updateBalanceForMethod(selectedAccount, totalImportAmount);
+            }
+            
+            if (selectedAccount !== "UPI" && totalUpiAmount !== 0) {
+              setBalances(prev => ({ ...prev, upi: (Number(prev.upi) || 0) + totalUpiAmount }));
+            }
+            
+          Haptics.impact({ style: ImpactStyle.Heavy });
+        }
+        
+        setCsvFile(null);
+        setCsvPreview([]);
+        setCsvHeaders([]);
+        setShowCsvModal(false);
+      };
+      reader.readAsText(csvFile);
+    };
+
     return (
-      <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", zIndex: 60, display: "flex", justifyContent: "center", padding: "60px 12px 24px" }}>
-        <div style={{ width: 390, maxWidth: "100%" }}>
-          <NeoSurface style={{ padding: 16 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <Search size={16} color={theme.textSecondary} />
-              <input
-                autoFocus
-                placeholder="Search expenses, todos, sessions…"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                style={{ flex: 1, border: "none", background: "none", outline: "none", color: theme.textPrimary, fontSize: 14, ...fontBody }}
-              />
-              <button onClick={() => { setShowSearch(false); setSearchQuery(""); }} style={{ border: "none", background: "none", color: theme.textSecondary }}><X size={18} /></button>
-            </div>
-          </NeoSurface>
-          <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 8 }}>
-            {results.map((r, i) => {
-              const RIcon = r.icon;
-              return (
-                <NeoSurface key={i} style={{ padding: "12px 14px", display: "flex", alignItems: "center", gap: 10 }}>
-                  <div style={{ width: 32, height: 32, borderRadius: 10, background: theme.bg, boxShadow: theme.shadowRaisedSm, display: "flex", alignItems: "center", justifyContent: "center", color: typeColor[r.type], flexShrink: 0 }}>
-                    <RIcon size={15} />
-                  </div>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ color: theme.textPrimary, fontWeight: 600, fontSize: 13, ...fontBody }}>{r.label}</div>
-                    <div style={{ color: theme.textSecondary, fontSize: 10.5, ...fontBody }}>{r.meta}</div>
-                  </div>
-                  <span style={{ color: typeColor[r.type], fontSize: 9.5, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.4, ...fontBody }}>{r.type}</span>
-                </NeoSurface>
-              );
-            })}
-            {results.length === 0 && (
-              <div style={{ color: theme.textSecondary, fontSize: 12.5, textAlign: "center", padding: 20, ...fontBody }}>No matches across expenses, todos, or sessions.</div>
-            )}
+      <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", display: "flex", alignItems: "flex-end", justifyContent: "center", zIndex: 60 }}>
+        <NeoSurface style={{ width: "100%", maxWidth: 390, maxHeight: "90vh", overflowY: "auto", padding: 24, borderBottomLeftRadius: 0, borderBottomRightRadius: 0 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+            <div style={{ fontSize: 18, fontWeight: 700, color: theme.textPrimary, ...fontDisplay }}>Import CSV</div>
+            <button onClick={() => { setShowCsvModal(false); setCsvFile(null); setCsvPreview([]); }} style={{ border: "none", background: "none", color: theme.textSecondary, cursor: "pointer" }}><X size={18} /></button>
           </div>
+          
+          {!csvFile ? (
+            <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+              <div style={{ background: theme.bg, padding: 16, borderRadius: 12, border: `1px solid ${theme.border}`, fontSize: 12, color: theme.textSecondary, display: "flex", flexDirection: "column", gap: 6, ...fontBody }}>
+                <strong style={{ color: theme.textPrimary, marginBottom: 4 }}>Format Requirements:</strong>
+                <div style={{ display: "flex", alignItems: "flex-start", gap: 6 }}><Check size={14} color={theme.success} style={{ flexShrink: 0, marginTop: 1 }} /> Must be a standard .csv or .xls file.</div>
+                <div style={{ display: "flex", alignItems: "flex-start", gap: 6 }}><Check size={14} color={theme.success} style={{ flexShrink: 0, marginTop: 1 }} /> The first active line must contain the column headers (Title line).</div>
+                <div style={{ display: "flex", alignItems: "flex-start", gap: 6 }}><Check size={14} color={theme.success} style={{ flexShrink: 0, marginTop: 1 }} /> Remove any unnecessary opening text or summary data before uploading.</div>
+              </div>
+              <label style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, background: theme.accent, color: "#fff", padding: 14, borderRadius: 16, cursor: "pointer", fontWeight: 600, ...fontBody }}>
+                <Upload size={18} />
+                Choose CSV/XLS File
+                <input type="file" accept=".csv,.xls" onChange={handleCsvFileSelect} id="csv-file-input" style={{ display: "none" }} />
+              </label>
+            </div>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+              <div style={{ color: theme.textSecondary, fontSize: 13, ...fontBody }}>Map your CSV columns to import transactions.</div>
+              
+              <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", paddingBottom: 12, borderBottom: `1px solid ${theme.border}` }}>
+                  <span style={{ fontSize: 14, color: theme.textPrimary, fontWeight: 600, ...fontBody }}>Account to Update</span>
+                  <select value={selectedAccount} onChange={e => setSelectedAccount(e.target.value)} style={{ background: theme.bg, color: theme.textPrimary, border: `1px solid ${theme.border}`, borderRadius: 8, padding: "6px", outline: "none", maxWidth: 150 }}>
+                    <option value="" disabled>-- Select Bank --</option>
+                    {banks.map(b => (
+                      <option key={b.id} value={b.id}>{b.bankName}</option>
+                    ))}
+                  </select>
+                </div>
+                
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <span style={{ fontSize: 14, color: theme.textPrimary, fontWeight: 600, ...fontBody }}>Date Column</span>
+                  <select value={colMap.date} onChange={e => setColMap(prev => ({...prev, date: e.target.value}))} style={{ background: theme.bg, color: theme.textPrimary, border: `1px solid ${theme.border}`, borderRadius: 8, padding: "6px", outline: "none", maxWidth: 150 }}>
+                    <option value="">-- Select --</option>
+                    {csvHeaders.map((h, i) => <option key={i} value={i}>{h}</option>)}
+                  </select>
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <span style={{ fontSize: 14, color: theme.textPrimary, fontWeight: 600, ...fontBody }}>Withdrawal/Amt</span>
+                  <select value={colMap.amount} onChange={e => setColMap(prev => ({...prev, amount: e.target.value}))} style={{ background: theme.bg, color: theme.textPrimary, border: `1px solid ${theme.border}`, borderRadius: 8, padding: "6px", outline: "none", maxWidth: 150 }}>
+                    <option value="">-- Select --</option>
+                    {csvHeaders.map((h, i) => <option key={i} value={i}>{h}</option>)}
+                  </select>
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <span style={{ fontSize: 14, color: theme.textPrimary, fontWeight: 600, ...fontBody }}>Deposit <span style={{fontSize:10, opacity:0.6}}>(Optional)</span></span>
+                  <select value={colMap.deposit} onChange={e => setColMap(prev => ({...prev, deposit: e.target.value}))} style={{ background: theme.bg, color: theme.textPrimary, border: `1px solid ${theme.border}`, borderRadius: 8, padding: "6px", outline: "none", maxWidth: 150 }}>
+                    <option value="">-- Select --</option>
+                    {csvHeaders.map((h, i) => <option key={i} value={i}>{h}</option>)}
+                  </select>
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <span style={{ fontSize: 14, color: theme.textPrimary, fontWeight: 600, ...fontBody }}>Description Column</span>
+                  <select value={colMap.desc} onChange={e => setColMap(prev => ({...prev, desc: e.target.value}))} style={{ background: theme.bg, color: theme.textPrimary, border: `1px solid ${theme.border}`, borderRadius: 8, padding: "6px", outline: "none", maxWidth: 150 }}>
+                    <option value="">-- Select --</option>
+                    {csvHeaders.map((h, i) => <option key={i} value={i}>{h}</option>)}
+                  </select>
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <span style={{ fontSize: 14, color: theme.textPrimary, fontWeight: 600, ...fontBody }}>Balance <span style={{fontSize:10, opacity:0.6}}>(Optional)</span></span>
+                  <select value={colMap.balance} onChange={e => setColMap(prev => ({...prev, balance: e.target.value}))} style={{ background: theme.bg, color: theme.textPrimary, border: `1px solid ${theme.border}`, borderRadius: 8, padding: "6px", outline: "none", maxWidth: 150 }}>
+                    <option value="">-- Select --</option>
+                    {csvHeaders.map((h, i) => <option key={i} value={i}>{h}</option>)}
+                  </select>
+                </div>
+              </div>
+
+              {csvPreview.length > 0 && (
+                <div style={{ marginTop: 8, padding: 12, background: theme.bg, borderRadius: 12, boxShadow: theme.shadowInset, overflowX: "auto" }}>
+                  <div style={{ fontSize: 11, color: theme.textSecondary, marginBottom: 8, fontWeight: 700, textTransform: "uppercase" }}>Data Preview</div>
+                  {csvPreview.map((row, i) => (
+                    <div key={i} style={{ display: "flex", gap: 8, marginBottom: 4, whiteSpace: "nowrap", fontSize: 11, color: theme.textPrimary }}>
+                      {row.map((cell, j) => (
+                         <span key={j} style={{ background: theme.border, padding: "2px 6px", borderRadius: 4 }}>{cell.length > 15 ? cell.substring(0, 15) + "..." : cell}</span>
+                      ))}
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <PrimaryButton 
+                label="Import Transactions" 
+                onClick={handleCsvImport} 
+                disabled={colMap.date === "" || colMap.amount === "" || colMap.desc === ""}
+                style={{ padding: 14, borderRadius: 16, marginTop: 8, opacity: (colMap.date === "" || colMap.amount === "" || colMap.desc === "") ? 0.5 : 1 }} 
+              />
+            </div>
+          )}
+        </NeoSurface>
+      </div>
+    );
+  }
+
+  /* ---------------------------------- INSIGHTS OVERLAY ---------------------------------- */
+
+  function InsightsOverlay() {
+    return (
+      <div style={{ position: "fixed", inset: 0, background: theme.bg, zIndex: 60, display: "flex", flexDirection: "column" }}>
+        <NeoSurface style={{ padding: "20px 18px", display: "flex", justifyContent: "space-between", alignItems: "center", borderBottomLeftRadius: 0, borderBottomRightRadius: 0, paddingTop: 40 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <Sparkles size={20} color={theme.accent} />
+            <span style={{ fontSize: 18, fontWeight: 700, color: theme.textPrimary, ...fontDisplay }}>AI Insights</span>
+          </div>
+          <button onClick={() => setShowInsights(false)} style={{ border: "none", background: "none", color: theme.textSecondary, cursor: "pointer", display: "flex" }}><X size={22} /></button>
+        </NeoSurface>
+        <div style={{ flex: 1, overflowY: "auto", background: theme.bg }}>
+          {renderInsightsTab()}
         </div>
       </div>
     );
@@ -2918,15 +3408,13 @@ Generate one short, helpful insight about my productivity or finances based ONLY
     { id: "meditation", label: "Meditation", icon: Flower2 },
     { id: "expense", label: "Expense", icon: Wallet },
     { id: "todo", label: "Todo", icon: ListChecks },
-    { id: "insights", label: "Insights", icon: BarChart3 },
   ];
-  const titles = { timer: "Focus Timer", meditation: "Mindfulness", expense: "Expense Tracker", todo: "Today's Tasks", insights: "Insights" };
+  const titles = { timer: "Focus Timer", meditation: "Mindfulness", expense: "Expense Tracker", todo: "Today's Tasks" };
   const subtitles = {
     timer: "Stay in the zone",
     meditation: "Breathe, relax, and center yourself",
     expense: apiKey ? "Synced with AI insight engine" : "Track every rupee",
     todo: "Auto-sorted for you",
-    insights: apiKey ? "Powered by your Gemini key" : "Add an API key for live AI insights",
   };
 
   return (
@@ -2950,7 +3438,7 @@ Generate one short, helpful insight about my productivity or finances based ONLY
             <div style={{ color: theme.textSecondary, fontSize: 11.5, marginTop: 2, ...fontBody }}>{subtitles[activeTab]}</div>
           </div>
           <div style={{ display: "flex", gap: 8 }}>
-            <IconBtn size={38} icon={<Search size={15} />} onClick={() => setShowSearch(true)} />
+            <IconBtn size={38} icon={<Sparkles size={15} />} onClick={() => setShowInsights(true)} />
             <IconBtn size={38} icon={<Settings size={15} />} onClick={() => setShowSettings(true)} />
             <IconBtn icon={<KeyRound size={17} />} onClick={() => setShowKeyModal(true)} active={!!apiKey} />
             <IconBtn icon={darkMode ? <Sun size={17} /> : <Moon size={17} />} onClick={() => setDarkMode((v) => !v)} />
@@ -3006,7 +3494,6 @@ Generate one short, helpful insight about my productivity or finances based ONLY
             {activeTab === "meditation" && renderMeditationTab()}
             {activeTab === "expense" && renderExpenseTab()}
             {activeTab === "todo" && <TodoTab theme={theme} NeoSurface={NeoSurface} NeoInput={NeoInput} PrimaryButton={PrimaryButton} SectionLabel={SectionLabel} fontDisplay={fontDisplay} fontBody={fontBody} />}
-            {activeTab === "insights" && renderInsightsTab()}
           </div>
         </div>
         <audio ref={audioRef} style={{ display: 'none' }} />
@@ -3015,7 +3502,175 @@ Generate one short, helpful insight about my productivity or finances based ONLY
 
       {showKeyModal && <ApiKeyModal />}
       {showSettings && <SettingsModal />}
-      {showSearch && <SearchOverlay />}
+      {showCategoryForm && (
+        <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(0,0,0,0.4)", backdropFilter: "blur(4px)", zIndex: 1100, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+          <div style={{ background: theme.bg, borderRadius: 24, width: "100%", maxWidth: 400, padding: 24, boxShadow: theme.shadowRaised }}>
+            <div style={{ fontSize: 18, fontWeight: 700, color: theme.textPrimary, ...fontDisplay, marginBottom: 16 }}>New Category</div>
+            
+            <div style={{ fontSize: 11, fontWeight: 700, color: theme.textSecondary, marginBottom: 4 }}>CATEGORY NAME</div>
+            <NeoInput 
+              placeholder="e.g., Pets, Education" 
+              value={newCategoryName} 
+              onChange={(e) => setNewCategoryName(e.target.value)} 
+            />
+
+            <div style={{ fontSize: 11, fontWeight: 700, color: theme.textSecondary, marginBottom: 8, marginTop: 16 }}>SELECT ICON</div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(8, 1fr)", gap: 4, marginBottom: 16 }}>
+              {ICON_OPTIONS.map(iconKey => (
+                <div 
+                  key={iconKey} 
+                  onClick={() => setNewCategoryIcon(iconKey)}
+                  style={{
+                    display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", padding: "10px 0",
+                    borderRadius: 12, background: newCategoryIcon === iconKey ? theme.accent : "transparent",
+                    color: newCategoryIcon === iconKey ? "#fff" : theme.textSecondary,
+                    boxShadow: newCategoryIcon === iconKey ? theme.shadowInset : "none",
+                    border: newCategoryIcon === iconKey ? `1px solid ${theme.border}` : "1px solid transparent",
+                    transition: "all 0.2s"
+                  }}
+                >
+                  {RENDER_CUSTOM_ICON(iconKey, 20)}
+                </div>
+              ))}
+            </div>
+            
+            <div style={{ display: "flex", gap: 12, marginTop: 24 }}>
+              <button onClick={() => setShowCategoryForm(false)} style={{ flex: 1, background: "transparent", color: theme.textSecondary, border: "none", padding: "14px", borderRadius: 14, fontWeight: 600, ...fontBody }}>Cancel</button>
+              <PrimaryButton 
+                label="Save Category" 
+                onClick={() => {
+                  if (newCategoryName.trim() && !ALL_EXPENSE_CATEGORIES.includes(newCategoryName.trim())) {
+                    setCustomCategories(prev => [...prev, newCategoryName.trim()]);
+                    setCustomCategoryIcons(prev => ({...prev, [newCategoryName.trim()]: newCategoryIcon}));
+                    setNewCat(newCategoryName.trim()); // Auto-select it
+                  }
+                  setShowCategoryForm(false);
+                  setNewCategoryName("");
+                  setNewCategoryIcon("Box");
+                }}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {showManageCategories && (
+        <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(0,0,0,0.4)", backdropFilter: "blur(4px)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+          <div style={{ background: theme.bg, borderRadius: 24, width: "100%", maxWidth: 400, padding: 24, boxShadow: theme.shadowRaised, maxHeight: "80vh", overflowY: "auto" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+              <div style={{ fontSize: 18, fontWeight: 700, color: theme.textPrimary, ...fontDisplay }}>Manage Categories</div>
+              <button onClick={() => setShowManageCategories(false)} style={{ background: "transparent", border: "none", color: theme.textSecondary }}><X size={20} /></button>
+            </div>
+            
+            {customCategories.length === 0 ? (
+              <div style={{ textAlign: "center", padding: 30, color: theme.textSecondary, ...fontBody }}>No custom categories added yet.</div>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                {customCategories.map(cat => (
+                  <div key={cat} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 16px", borderRadius: 16, background: theme.bg, boxShadow: theme.shadowInset }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                      <span style={{ display: "flex", alignItems: "center", justifyContent: "center", width: 24, height: 24, color: theme.textSecondary }}>
+                        {customCategoryIcons[cat] ? RENDER_CUSTOM_ICON(customCategoryIcons[cat], 20) : <Box size={20} />}
+                      </span>
+                      <span style={{ fontSize: 15, fontWeight: 600, color: theme.textPrimary }}>{cat}</span>
+                    </div>
+                    <button 
+                      onClick={() => {
+                        setCustomCategories(prev => prev.filter(c => c !== cat));
+                        setTransactions(prev => prev.map(t => t.category === cat ? { ...t, category: "Other" } : t));
+                        setCustomCategoryIcons(prev => { const copy = {...prev}; delete copy[cat]; return copy; });
+                      }} 
+                      style={{ background: "transparent", border: "none", color: theme.danger, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", padding: 8 }}
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+            
+            <PrimaryButton 
+              label="Add Category" 
+              icon={<Plus size={18} />} 
+              onClick={() => {
+                setShowManageCategories(false);
+                setShowCategoryForm(true);
+              }}
+              style={{ marginTop: 24, width: "100%" }}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* CUSTOM RULE MODAL */}
+      {showRuleModal && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 70, display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <NeoSurface style={{ width: 320, padding: 24, display: "flex", flexDirection: "column", gap: 16 }}>
+            <div style={{ fontSize: 18, fontWeight: 700, color: theme.textPrimary, ...fontDisplay }}>Add Custom Rule</div>
+            <div>
+              <label style={{ fontSize: 12, color: theme.textSecondary, marginBottom: 4, display: "block", ...fontBody }}>Keyword</label>
+              <NeoInput id="modal-rule-keyword" placeholder="e.g. bescom" style={{ width: "100%", padding: "10px", fontSize: 14 }} />
+            </div>
+            <div>
+              <label style={{ fontSize: 12, color: theme.textSecondary, marginBottom: 4, display: "block", ...fontBody }}>Category</label>
+              <select id="modal-rule-category" onChange={(e) => {
+                if (e.target.value === "_ADD_NEW") {
+                  setShowCategoryForm(true);
+                  e.target.value = "Other";
+                }
+              }} style={{ width: "100%", padding: "10px", borderRadius: 12, border: "none", background: theme.bg, color: theme.textPrimary, boxShadow: theme.shadowInset, outline: "none", fontSize: 14, ...fontBody }}>
+                {ALL_EXPENSE_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                <option value="_ADD_NEW" style={{ color: theme.accent, fontWeight: 700 }}>+ Add New Category</option>
+              </select>
+            </div>
+            <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+              <button onClick={() => setShowRuleModal(false)} style={{ flex: 1, padding: "12px", borderRadius: 12, border: "none", background: theme.bg, color: theme.textSecondary, boxShadow: theme.shadowRaisedSm, fontWeight: 600, ...fontBody, cursor: "pointer" }}>Cancel</button>
+              <button onClick={() => {
+                const kw = document.getElementById("modal-rule-keyword").value.trim().toLowerCase();
+                const cat = document.getElementById("modal-rule-category").value;
+                if (kw) {
+                  setCustomCategoryRules(prev => [...prev, { keyword: kw, category: cat }]);
+                  setTransactions(prev => prev.map(t => t.name.toLowerCase().includes(kw) ? { ...t, category: cat } : t));
+                  setShowRuleModal(false);
+                }
+              }} style={{ flex: 1, padding: "12px", borderRadius: 12, border: "none", background: theme.accent, color: "#fff", fontWeight: 600, ...fontBody, cursor: "pointer" }}>Confirm</button>
+            </div>
+          </NeoSurface>
+        </div>
+      )}
+
+      {/* WIPE CONFIRM MODAL */}
+      {showWipeConfirm && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 80, display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <NeoSurface style={{ width: 320, padding: 24, display: "flex", flexDirection: "column", gap: 16 }}>
+            <div style={{ fontSize: 18, fontWeight: 700, color: theme.danger, ...fontDisplay }}>Wipe Data</div>
+            <div style={{ fontSize: 14, color: theme.textSecondary, ...fontBody }}>
+              Are you sure you want to delete all transactions and reset balances? Your bank accounts and settings will be preserved.
+            </div>
+            <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+              <button onClick={() => setShowWipeConfirm(false)} style={{ flex: 1, padding: "12px", borderRadius: 12, border: "none", background: theme.bg, color: theme.textSecondary, boxShadow: theme.shadowRaisedSm, fontWeight: 600, ...fontBody, cursor: "pointer" }}>Cancel</button>
+              <button onClick={() => {
+                setTransactions([]);
+                setBalances({ bank: 0, upi: 0 });
+                setBanks(prev => prev.map(b => ({ ...b, balance: 0 })));
+                setShowWipeConfirm(false);
+                setShowSettings(false);
+                setToastMessage("Transactions cleared successfully");
+              }} style={{ flex: 1, padding: "12px", borderRadius: 12, border: "none", background: theme.danger, color: "#fff", fontWeight: 600, ...fontBody, cursor: "pointer" }}>Wipe Data</button>
+            </div>
+          </NeoSurface>
+        </div>
+      )}
+
+      {/* TOAST NOTIFICATION */}
+      {toastMessage && (
+        <div style={{ position: "fixed", bottom: 20, left: "50%", transform: "translateX(-50%)", background: theme.textPrimary, color: theme.bg, padding: "12px 24px", borderRadius: 30, fontSize: 14, fontWeight: 600, ...fontBody, zIndex: 100, boxShadow: theme.shadowRaisedLg, animation: "fadeIn 0.3s ease-out" }}>
+          {toastMessage}
+        </div>
+      )}
+
+      {showCsvModal && <CsvImportModalComponent />}
+      {showInsights && <InsightsOverlay />}
       {showWidget && <WidgetPreviewModal />}
 
       {/* In-App Reminder Alerts */}

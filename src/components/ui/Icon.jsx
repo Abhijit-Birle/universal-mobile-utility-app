@@ -52,6 +52,8 @@ const iconMap = {
   'star-fill': Lucide.Star,
   'list-plus': Lucide.ListPlus,
   'sliders': Lucide.SlidersHorizontal,
+  'arrow-up': Lucide.ArrowUp,
+  'send': Lucide.Send,
 };
 
 export default function Icon({ name, size = 20, color = 'currentColor', className = '' }) {

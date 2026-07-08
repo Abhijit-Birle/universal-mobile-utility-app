@@ -326,10 +326,10 @@ export default function TodoTab({ theme, NeoSurface, NeoInput, PrimaryButton, Se
             <div style={{ flex: 1, position: 'relative' }}>
               <NeoSurface pressed style={{ padding: '4px 8px', borderRadius: 24, display: 'flex', alignItems: 'center' }}>
                 <button 
-                  onClick={handleQuickAdd}
-                  style={{ width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', color: theme.accent, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+                  onClick={() => setShowQuickAddExtras(!showQuickAddExtras)}
+                  style={{ width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', color: showQuickAddExtras || quickAddDue || quickAddReminder ? theme.accent : theme.textSecondary, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
                 >
-                  <Icon name="list-plus" size={20} />
+                  <Icon name="sliders" size={18} />
                 </button>
                 <input 
                   type="text"
@@ -344,10 +344,10 @@ export default function TodoTab({ theme, NeoSurface, NeoInput, PrimaryButton, Se
                   }}
                 />
                 <button 
-                  onClick={() => setShowQuickAddExtras(!showQuickAddExtras)}
-                  style={{ width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', color: showQuickAddExtras || quickAddDue || quickAddReminder ? theme.accent : theme.textSecondary, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+                  onClick={handleQuickAdd}
+                  style={{ width: 32, height: 32, borderRadius: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', background: quickAddText.trim() ? theme.accent : theme.textSecondary, border: 'none', cursor: quickAddText.trim() ? 'pointer' : 'default', padding: 0, transition: 'background 0.2s' }}
                 >
-                  <Icon name="sliders" size={18} />
+                  <Icon name="arrow-up" size={18} />
                 </button>
               </NeoSurface>
             </div>

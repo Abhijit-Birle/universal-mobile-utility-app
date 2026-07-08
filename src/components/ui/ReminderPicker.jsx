@@ -1,6 +1,7 @@
 // ponytail: minimal reminder picker — combines date + time, stores as "YYYY-MM-DDTHH:MM"
 import { useState, useRef, useEffect } from 'react';
 import Icon from './Icon.jsx';
+import WheelPicker from './WheelPicker.jsx';
 
 const DAYS = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
 const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
@@ -68,7 +69,9 @@ export default function ReminderPicker({ value, onChange, theme, fontBody, place
 
   const handleTimeChange = (t) => {
     setTimeStr(t);
-    if (selDate) onChange(formatReminder(selDate, t));
+    const dateToUse = selDate || new Date();
+    if (!selDate) setSelDate(dateToUse);
+    onChange(formatReminder(dateToUse, t));
   };
 
   // time spinner state
@@ -88,26 +91,15 @@ export default function ReminderPicker({ value, onChange, theme, fontBody, place
 
   const setH = (h) => { setHourState(h); emitTime(h, minute, ampm); };
   const setM = (m) => { setMinuteState(m); emitTime(hour, m, ampm); };
-  const toggleAp = () => { const next = ampm === 'AM' ? 'PM' : 'AM'; setAmpmState(next); emitTime(hour, minute, next); };
+  const setAp = (ap) => { setAmpmState(ap); emitTime(hour, minute, ap); };
 
   const displayText = value
     ? `${selDate ? `${selDate.getDate()} ${MONTHS[selDate.getMonth()].slice(0,3)}` : ''} ${fmt24ToDisplay(timeStr)}`
     : placeholder;
 
-  const apBtn = (label) => (
-    <button onClick={() => { if (ampm !== label) toggleAp(); }} style={{
-      padding: '4px 10px', borderRadius: 20, border: 'none',
-      background: ampm === label ? theme.accent : 'transparent',
-      color: ampm === label ? '#fff' : theme.textSecondary,
-      fontSize: 11, cursor: 'pointer', fontWeight: 600, ...fontBody
-    }}>{label}</button>
-  );
-
-  const chevBtn = (icon, onClick) => (
-    <button onClick={onClick} style={{ background: 'none', border: 'none', color: theme.textSecondary, cursor: 'pointer', padding: 2, display: 'flex', alignItems: 'center' }}>
-      <Icon name={icon} size={14} color={theme.textPrimary} />
-    </button>
-  );
+  const hoursList = Array.from({ length: 12 }, (_, i) => i + 1);
+  const minutesList = Array.from({ length: 60 }, (_, i) => i);
+  const ampmsList = ['AM', 'PM'];
 
   return (
     <div ref={ref} style={{ position: 'relative', flex: 1 }}>
@@ -170,26 +162,36 @@ export default function ReminderPicker({ value, onChange, theme, fontBody, place
           <div style={{ borderTop: `1px solid ${theme.border}`, margin: '10px 0' }} />
 
           {/* Time spinner */}
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1 }}>
-              {chevBtn('chevronDown', () => setH(hour === 1 ? 12 : hour - 1))}
-              <span style={{ fontSize: 18, fontWeight: 700, color: theme.textPrimary, width: 32, textAlign: 'center', ...fontBody }}>
-                {String(hour).padStart(2,'0')}
-              </span>
-              {chevBtn('chevronRight', () => setH(hour === 12 ? 1 : hour + 1))}
-            </div>
-            <span style={{ fontSize: 18, color: theme.textPrimary, fontWeight: 700 }}>:</span>
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1 }}>
-              {chevBtn('chevronDown', () => setM(minute === 0 ? 55 : minute - 5))}
-              <span style={{ fontSize: 18, fontWeight: 700, color: theme.textPrimary, width: 32, textAlign: 'center', ...fontBody }}>
-                {String(minute).padStart(2,'0')}
-              </span>
-              {chevBtn('chevronRight', () => setM(minute >= 55 ? 0 : minute + 5))}
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginLeft: 6 }}>
-              {apBtn('AM')}
-              {apBtn('PM')}
-            </div>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 2 }}>
+            <WheelPicker
+              options={hoursList}
+              value={hour}
+              onChange={setH}
+              theme={theme}
+              width={40}
+              fontSize={18}
+              itemHeight={32}
+            />
+            <span style={{ fontSize: 18, color: theme.textPrimary, fontWeight: 700, marginBottom: 2 }}>:</span>
+            <WheelPicker
+              options={minutesList}
+              value={minute}
+              onChange={setM}
+              theme={theme}
+              width={40}
+              fontSize={18}
+              itemHeight={32}
+            />
+            <WheelPicker
+              options={ampmsList}
+              value={ampm}
+              onChange={setAp}
+              theme={theme}
+              width={50}
+              fontSize={15}
+              itemHeight={32}
+              formatOption={(o) => o}
+            />
           </div>
 
           {selDate && (

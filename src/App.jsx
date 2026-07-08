@@ -942,6 +942,55 @@ export default function NeoApp() {
     />
   ), [theme]);
 
+  const CollapsibleSection = useCallback(({ title, defaultOpen = true, children, extraHeader }) => {
+    const [isOpen, setIsOpen] = useState(defaultOpen);
+    
+    return (
+      <div style={{ marginTop: 20 }}>
+        <div 
+          onClick={() => setIsOpen(!isOpen)}
+          style={{ 
+            display: "flex", 
+            justifyContent: "space-between", 
+            alignItems: "center", 
+            marginBottom: isOpen ? 12 : 0,
+            transition: "margin-bottom 0.4s ease-in-out",
+            cursor: "pointer",
+            userSelect: "none"
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: 10, flex: 1, minWidth: 0 }}>
+            <SectionLabel style={{ margin: 0, cursor: "pointer", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{title}</SectionLabel>
+            {extraHeader}
+          </div>
+          <div style={{
+            transform: isOpen ? "rotate(180deg)" : "rotate(0deg)",
+            transition: "transform 0.4s ease-in-out",
+            color: theme.textSecondary,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            marginLeft: 10
+          }}>
+            <ChevronDown size={18} />
+          </div>
+        </div>
+        
+        <div style={{
+          display: "grid",
+          gridTemplateRows: isOpen ? "1fr" : "0fr",
+          transition: "grid-template-rows 0.4s ease-in-out, opacity 0.4s ease-in-out",
+          opacity: isOpen ? 1 : 0,
+          pointerEvents: isOpen ? "auto" : "none"
+        }}>
+          <div style={{ overflow: "hidden" }}>
+            {children}
+          </div>
+        </div>
+      </div>
+    );
+  }, [theme]);
+
   const SectionLabel = useCallback(({ children, style }) => (
     <div style={{ color: theme.textSecondary, fontSize: 13, fontWeight: 700, letterSpacing: 0.5, textTransform: "uppercase", marginBottom: 12, ...fontDisplay, ...style }}>
       {children}
@@ -1021,7 +1070,7 @@ export default function NeoApp() {
     );
   }, [theme]);
 
-  const NeoDatePicker = useCallback(({ value, onChange, style }) => {
+  const NeoDatePicker = useCallback(({ value, onChange, style, placeholder, wrapperStyle }) => {
     const [open, setOpen] = useState(false);
     const containerRef = useRef(null);
 
@@ -1056,7 +1105,7 @@ export default function NeoApp() {
     const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
     return (
-      <div ref={containerRef} style={{ position: 'relative', flex: 1 }}>
+      <div ref={containerRef} style={{ position: 'relative', flex: 1, ...wrapperStyle }}>
         <div
           onClick={() => setOpen(!open)}
           style={{
@@ -1077,7 +1126,7 @@ export default function NeoApp() {
             ...style
           }}
         >
-          {value || "Select Date"}
+          {value || placeholder || "Select Date"}
         </div>
 
         {open && (
@@ -1810,26 +1859,39 @@ export default function NeoApp() {
       const startX = React.useRef(0);
       const dragging = React.useRef(false);
       const THRESHOLD = 60;
-      const onTouchStart = (e) => { startX.current = e.touches[0].clientX; dragging.current = true; };
+      const onTouchStart = (e) => { e.stopPropagation(); startX.current = e.touches[0].clientX; dragging.current = true; };
       const onTouchMove = (e) => {
         if (!dragging.current) return;
+        e.stopPropagation();
         const dx = e.touches[0].clientX - startX.current;
         if (dx < 0) setOffset(Math.max(dx, -THRESHOLD));
       };
-      const onTouchEnd = () => {
+      const onTouchEnd = (e) => {
+        e.stopPropagation();
         dragging.current = false;
         setOffset(o => o < -THRESHOLD / 2 ? -THRESHOLD : 0);
       };
       return (
-        <div style={{ position: 'relative', overflow: 'hidden', borderRadius: 20, ...style }}>
+        <div style={{ position: 'relative', ...style }}>
           {/* delete bg */}
-          <div style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: THRESHOLD, background: theme.danger, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '0 20px 20px 0' }}
+          <div style={{ 
+            position: 'absolute', 
+            inset: 0,
+            background: theme.danger, 
+            display: 'flex', 
+            alignItems: 'center', 
+            justifyContent: 'flex-end', 
+            paddingRight: 22,
+            borderRadius: 20,
+            zIndex: 1,
+            boxShadow: theme.shadowInset
+          }}
             onClick={onDelete}>
             <Trash2 size={18} color="#fff" />
           </div>
           {/* sliding content */}
           <div
-            style={{ transform: `translateX(${offset}px)`, transition: dragging.current ? 'none' : 'transform .2s' }}
+            style={{ position: 'relative', zIndex: 2, transform: `translateX(${offset}px)`, transition: dragging.current ? 'none' : 'transform .2s' }}
             onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd}
           >
             {children}
@@ -1957,47 +2019,61 @@ export default function NeoApp() {
               <div style={{ fontSize: 11, fontWeight: 700, color: theme.textSecondary, marginTop: 4 }}>DESCRIPTION</div>
               <NeoInput placeholder="Description (e.g., Starbucks, Uber)" value={newDesc} onChange={e => handleDescChange(e.target.value)} />
 
-              <div style={{ fontSize: 11, fontWeight: 700, color: theme.textSecondary, marginTop: 12, marginBottom: 8 }}>CATEGORY</div>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12, marginBottom: 20 }}>
-                {(newType === "expense" ? ALL_EXPENSE_CATEGORIES : INCOME_CATEGORIES).map(c => (
-                  <div
-                    key={c}
-                    onClick={() => setNewCat(c)}
-                    style={{
-                      display: "flex",
-                      flexDirection: "column",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      gap: 6,
-                      cursor: "pointer",
-                      padding: "16px 8px",
-                      borderRadius: 16,
-                      background: newCat === c ? theme.accent : theme.bg,
-                      boxShadow: newCat === c ? theme.shadowInset : theme.shadowRaisedSm,
-                      transition: "all 0.2s"
-                    }}
-                  >
-                    <div style={{ fontSize: 24, marginBottom: 4 }}>
-                      {TX_CATEGORY_ICONS[c] || (customCategoryIcons[c] ? RENDER_CUSTOM_ICON(customCategoryIcons[c], 18) : <Box size={18} />)}
+              <div style={{ marginTop: 24, marginBottom: 24 }}>
+                <CollapsibleSection
+                  title="CATEGORY"
+                  defaultOpen={false}
+                  extraHeader={
+                    <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 6, color: theme.accent, fontSize: 12, fontWeight: 700 }}>
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "center" }}>
+                        {TX_CATEGORY_ICONS[newCat] || (customCategoryIcons[newCat] ? RENDER_CUSTOM_ICON(customCategoryIcons[newCat], 14) : <Box size={14} />)}
+                      </div>
+                      {newCat}
                     </div>
-                    <div style={{ fontSize: 11, fontWeight: 700, ...fontBody, textAlign: "center", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", width: "100%", color: newCat === c ? "#fff" : theme.textSecondary }}>
-                      {c}
-                    </div>
+                  }
+                >
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12, marginTop: 12 }}>
+                    {(newType === "expense" ? ALL_EXPENSE_CATEGORIES : INCOME_CATEGORIES).map(c => (
+                      <div
+                        key={c}
+                        onClick={() => setNewCat(c)}
+                        style={{
+                          display: "flex",
+                          flexDirection: "column",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          gap: 6,
+                          cursor: "pointer",
+                          padding: "16px 8px",
+                          borderRadius: 16,
+                          background: newCat === c ? theme.accent : theme.bg,
+                          boxShadow: newCat === c ? theme.shadowInset : theme.shadowRaisedSm,
+                          transition: "all 0.2s"
+                        }}
+                      >
+                        <div style={{ fontSize: 24, marginBottom: 4 }}>
+                          {TX_CATEGORY_ICONS[c] || (customCategoryIcons[c] ? RENDER_CUSTOM_ICON(customCategoryIcons[c], 18) : <Box size={18} />)}
+                        </div>
+                        <div style={{ fontSize: 11, fontWeight: 700, ...fontBody, textAlign: "center", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", width: "100%", color: newCat === c ? "#fff" : theme.textSecondary }}>
+                          {c}
+                        </div>
+                      </div>
+                    ))}
+                    
+                    {newType === "expense" && (
+                      <div
+                        onClick={() => setShowCategoryForm(true)}
+                        style={{
+                          display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 6,
+                          cursor: "pointer", padding: "16px 8px", borderRadius: 16, background: theme.bg, boxShadow: theme.shadowRaisedSm, transition: "all 0.2s"
+                        }}
+                      >
+                        <div style={{ fontSize: 24, marginBottom: 4, color: theme.textSecondary }}><Plus size={22} /></div>
+                        <div style={{ fontSize: 11, fontWeight: 700, ...fontBody, textAlign: "center", color: theme.textSecondary }}>Add New</div>
+                      </div>
+                    )}
                   </div>
-                ))}
-                
-                {newType === "expense" && (
-                  <div
-                    onClick={() => setShowCategoryForm(true)}
-                    style={{
-                      display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 6,
-                      cursor: "pointer", padding: "16px 8px", borderRadius: 16, background: theme.bg, boxShadow: theme.shadowRaisedSm, transition: "all 0.2s"
-                    }}
-                  >
-                    <div style={{ fontSize: 24, marginBottom: 4, color: theme.textSecondary }}><Plus size={22} /></div>
-                    <div style={{ fontSize: 11, fontWeight: 700, ...fontBody, textAlign: "center", color: theme.textSecondary }}>Add New</div>
-                  </div>
-                )}
+                </CollapsibleSection>
               </div>
 
               <PrimaryButton label={editingTxId ? "Save Changes" : "Add transaction"} icon={<Check size={18} />} onClick={() => {
@@ -2197,44 +2273,48 @@ export default function NeoApp() {
               )}
             </div>
 
-            <SectionLabel>Recent transactions</SectionLabel>
-            <div style={{ display: "flex", flexDirection: "column", gap: 12, marginBottom: 24 }}>
-              {transactions.slice(0, 4).map((t) => {
-                const isExp = t.type === "expense";
-                return (
-                  <SwipeRow key={t.id} onDelete={() => deleteTx(t.id)}>
-                    <NeoSurface style={{ padding: 16, display: "flex", alignItems: "center", gap: 14, borderRadius: 20 }}>
-                      <div style={{ width: 40, height: 40, borderRadius: 12, background: isExp ? `${theme.danger}15` : `${theme.success}15`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18 }}>
-                        {TX_CATEGORY_ICONS[t.category] || (customCategoryIcons[t.category] ? RENDER_CUSTOM_ICON(customCategoryIcons[t.category], 18) : <Box size={18} />)}
-                      </div>
-                      <div style={{ flex: 1 }}>
-                        <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 2 }}>
-                          <div style={{ color: theme.textPrimary, fontSize: 14, fontWeight: 700, ...fontBody }}>{t.category}</div>
-                          <BankBadge tx={t} />
+            <CollapsibleSection title="Recent transactions" defaultOpen={true}>
+              <div style={{ display: "flex", flexDirection: "column", gap: 12, marginBottom: 24 }}>
+                {transactions.slice(0, 4).map((t) => {
+                  const isExp = t.type === "expense";
+                  return (
+                    <SwipeRow key={t.id} onDelete={() => deleteTx(t.id)}>
+                      <NeoSurface onClick={() => openEdit(t)} style={{ padding: 16, display: "flex", alignItems: "center", gap: 14, borderRadius: 20, cursor: "pointer" }}>
+                        <div style={{ width: 40, height: 40, borderRadius: 12, background: isExp ? `${theme.danger}15` : `${theme.success}15`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18 }}>
+                          {TX_CATEGORY_ICONS[t.category] || (customCategoryIcons[t.category] ? RENDER_CUSTOM_ICON(customCategoryIcons[t.category], 18) : <Box size={18} />)}
                         </div>
-                        <div style={{ color: theme.textSecondary, fontSize: 11, ...fontBody }}>{t.desc} • {t.date}</div>
-                      </div>
-                      <span style={{ fontSize: 14, fontWeight: 600, color: isExp ? theme.danger : theme.success, ...fontBody }}>
-                        {isExp ? "-" : "+"}{formatCurrency(t.amount, baseCurrency)}
-                      </span>
-                    </NeoSurface>
-                  </SwipeRow>
-                );
-              })}
-            </div>
-
-            <div style={{ marginTop: 24 }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: 16 }}>
-                <div>
-                  <SectionLabel>Upcoming Bills</SectionLabel>
-                  <div style={{ fontSize: 12, color: theme.textSecondary, marginTop: 2, fontWeight: 500 }}>Monthly Burn Rate: <span style={{ color: theme.danger, fontWeight: 700 }}>{formatCurrency(monthlyBurnRate, baseCurrency)}</span></div>
-                </div>
-                <button onClick={() => {
-                  setEditingBill(null);
-                  setBillFormState({ name: "", amount: "", daysLeft: "" });
-                  setShowBillModal(true);
-                }} style={{ border: "none", background: theme.bg, boxShadow: theme.shadowRaisedSm, padding: "6px 12px", borderRadius: 12, color: theme.textPrimary, fontSize: 13, fontWeight: 700, cursor: "pointer", ...fontBody }}>+ Add</button>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 2 }}>
+                            <div style={{ color: theme.textPrimary, fontSize: 14, fontWeight: 700, ...fontBody }}>{t.category}</div>
+                            <BankBadge tx={t} />
+                          </div>
+                          <div style={{ color: theme.textSecondary, fontSize: 11, ...fontBody }}>{t.desc} • {t.date}</div>
+                        </div>
+                        <span style={{ fontSize: 14, fontWeight: 600, color: isExp ? theme.danger : theme.success, ...fontBody }}>
+                          {isExp ? "-" : "+"}{formatCurrency(t.amount, baseCurrency)}
+                        </span>
+                      </NeoSurface>
+                    </SwipeRow>
+                  );
+                })}
               </div>
+            </CollapsibleSection>
+
+            <CollapsibleSection 
+              title="Upcoming Bills" 
+              defaultOpen={true}
+              extraHeader={
+                <div style={{ display: "flex", flex: 1, justifyContent: "space-between", alignItems: "center" }}>
+                  <div style={{ fontSize: 12, color: theme.textSecondary, fontWeight: 500 }}>Burn Rate: <span style={{ color: theme.danger, fontWeight: 700 }}>{formatCurrency(monthlyBurnRate, baseCurrency)}</span></div>
+                  <button onClick={(e) => {
+                    e.stopPropagation();
+                    setEditingBill(null);
+                    setBillFormState({ name: "", amount: "", daysLeft: "" });
+                    setShowBillModal(true);
+                  }} style={{ border: "none", background: theme.bg, boxShadow: theme.shadowRaisedSm, padding: "6px 12px", borderRadius: 12, color: theme.textPrimary, fontSize: 13, fontWeight: 700, cursor: "pointer", ...fontBody }}>+ Add</button>
+                </div>
+              }
+            >
               <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                 {upcomingBills.map((b) => {
                   const now = new Date();
@@ -2257,7 +2337,11 @@ export default function NeoApp() {
 
                   return (
                     <SwipeRow key={b.id} onDelete={() => setUpcomingBills(bills => bills.filter(x => x.id !== b.id))}>
-                      <NeoSurface style={{ padding: "12px 14px", display: "flex", alignItems: "center", gap: 10, borderRadius: 20 }}>
+                      <NeoSurface onClick={() => {
+                            setEditingBill(b);
+                            setBillFormState({ name: b.name, amount: b.amount.toString(), daysLeft: b.daysLeft.toString() });
+                            setShowBillModal(true);
+                          }} style={{ padding: "12px 14px", display: "flex", alignItems: "center", gap: 10, borderRadius: 20, cursor: "pointer" }}>
                         <div style={{ width: 36, height: 36, borderRadius: 12, flexShrink: 0, background: theme.bg, boxShadow: theme.shadowRaisedSm, display: "flex", alignItems: "center", justifyContent: "center", color: daysUntilDue <= 3 ? theme.danger : theme.accent }}>
                           <Bell size={16} />
                         </div>
@@ -2266,31 +2350,38 @@ export default function NeoApp() {
                           <div style={{ color: theme.textSecondary, fontSize: 11, ...fontBody }}>Due on the {getOrdinal(b.daysLeft)} • {daysUntilDue} day{daysUntilDue !== 1 ? "s" : ""} left</div>
                         </div>
                         <div style={{ display: "flex", alignItems: "center" }}>
-                          <div style={{ color: theme.textPrimary, fontWeight: 700, fontSize: 13.5, marginRight: 8, ...fontDisplay }}>{formatCurrency(b.amount, baseCurrency)}</div>
-                          <button onClick={() => {
-                            setEditingBill(b);
-                            setBillFormState({ name: b.name, amount: b.amount.toString(), daysLeft: b.daysLeft.toString() });
-                            setShowBillModal(true);
-                          }} style={{ border: "none", background: "none", color: theme.textSecondary, cursor: "pointer" }}><Pencil size={14} /></button>
+                          <div style={{ color: theme.textPrimary, fontWeight: 700, fontSize: 13.5, ...fontDisplay }}>{formatCurrency(b.amount, baseCurrency)}</div>
                         </div>
                       </NeoSurface>
                     </SwipeRow>
                   );
                 })}
               </div>
-            </div>
+            </CollapsibleSection>
 
-            <div style={{ marginTop: 20, marginBottom: showCalendarWidget ? 20 : 0 }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: showCalendarWidget ? 12 : 0 }}>
-                <SectionLabel style={{ margin: 0 }}>Calendar</SectionLabel>
-                <button onClick={() => setShowCalendarWidget(!showCalendarWidget)} style={{ background: theme.bg, color: theme.textSecondary, border: "none", padding: "8px 12px", borderRadius: 12, boxShadow: showCalendarWidget ? theme.shadowInset : theme.shadowRaisedSm, fontWeight: 600, fontSize: 12, ...fontBody, cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}>
-                  <Calendar size={14} />
-                  {showCalendarWidget ? "Hide Calendar" : "Show Calendar"}
-                </button>
-              </div>
+            <CollapsibleSection 
+              title={
+                filterStartDate || filterEndDate 
+                  ? `From ${filterStartDate || '...'} to ${filterEndDate || '...'}`
+                  : selectedDate 
+                    ? `On ${selectedDate} ${monthLabel}` 
+                    : "All transactions"
+              }
+              defaultOpen={false}
+              extraHeader={
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginLeft: "auto" }}>
+                  <button onClick={(e) => { e.stopPropagation(); setShowCalendarWidget(!showCalendarWidget); }} style={{ width: 28, height: 28, borderRadius: 8, background: showCalendarWidget ? theme.accent : theme.bg, border: "none", boxShadow: showCalendarWidget ? theme.shadowInset : theme.shadowRaisedSm, color: showCalendarWidget ? "#fff" : theme.accent, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", transition: "all 0.2s" }} title="Toggle Calendar">
+                    <Calendar size={14} />
+                  </button>
+                  <button onClick={(e) => { e.stopPropagation(); exportFilteredDataToCSV(); }} style={{ width: 28, height: 28, borderRadius: 8, background: theme.bg, border: "none", boxShadow: theme.shadowRaisedSm, color: theme.accent, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }} title="Export as CSV">
+                    <Download size={14} />
+                  </button>
+                </div>
+              }
+            >
 
               {showCalendarWidget && (
-                <NeoSurface style={{ padding: 16 }}>
+                <NeoSurface style={{ padding: 16, marginBottom: 16 }}>
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
                     <IconBtn size={32} icon={<ChevronLeft size={15} />} onClick={() => setMonthOffset((m) => m - 1)} />
                     <div style={{ color: theme.textPrimary, fontWeight: 700, fontSize: 13.5, ...fontDisplay }}>{monthLabel}</div>
@@ -2330,34 +2421,20 @@ export default function NeoApp() {
                   </div>
                 </NeoSurface>
               )}
-            </div>
-
-            <div style={{ marginTop: 20 }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                  <SectionLabel style={{ margin: 0 }}>{selectedDate ? `Transactions on ${selectedDate} ${monthLabel}` : "All transactions"}</SectionLabel>
-                  <button onClick={exportFilteredDataToCSV} style={{ width: 28, height: 28, borderRadius: 8, background: theme.bg, border: "none", boxShadow: theme.shadowRaisedSm, color: theme.accent, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }} title="Export as CSV">
-                    <Download size={14} />
-                  </button>
-                </div>
-              </div>
               
-              <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 10, marginBottom: 16 }}>
-                <select value={filterType} onChange={e => setFilterType(e.target.value)} style={{ flex: 1, minWidth: 90, padding: "8px 12px", borderRadius: 12, background: theme.bg, color: theme.textPrimary, border: "none", boxShadow: theme.shadowInset, fontSize: 12, fontWeight: 600, outline: "none", ...fontBody }}>
+              <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "flex-start", alignItems: "center", gap: 8, marginBottom: 16 }}>
+                <select value={filterType} onChange={e => setFilterType(e.target.value)} style={{ flexShrink: 0, padding: "6px 8px", borderRadius: 10, background: theme.bg, color: theme.textPrimary, border: "none", boxShadow: theme.shadowInset, fontSize: 11, fontWeight: 600, outline: "none", ...fontBody }}>
                   <option value="All">All Types</option>
                   <option value="Income">Income</option>
                   <option value="Expense">Expense</option>
                 </select>
-                <select value={filterBank} onChange={e => setFilterBank(e.target.value)} style={{ flex: 1, minWidth: 90, padding: "8px 12px", borderRadius: 12, background: theme.bg, color: theme.textPrimary, border: "none", boxShadow: theme.shadowInset, fontSize: 12, fontWeight: 600, outline: "none", ...fontBody }}>
+                <select value={filterBank} onChange={e => setFilterBank(e.target.value)} style={{ flexShrink: 0, padding: "6px 8px", borderRadius: 10, background: theme.bg, color: theme.textPrimary, border: "none", boxShadow: theme.shadowInset, fontSize: 11, fontWeight: 600, outline: "none", ...fontBody }}>
                   <option value="All">All Banks</option>
                   <option value="UPI">UPI</option>
                   {banks.map(b => <option key={b.id} value={b.id}>{b.bankName.substring(0, 10)}</option>)}
                 </select>
-                <div style={{ display: "flex", alignItems: "center", gap: 10, flex: 2, minWidth: 200 }}>
-                  <NeoDatePicker value={filterStartDate} onChange={setFilterStartDate} style={{ height: 32, fontSize: 11, padding: "8px 12px" }} />
-                  <span style={{ fontSize: 10, color: theme.textSecondary, fontWeight: 700 }}>TO</span>
-                  <NeoDatePicker value={filterEndDate} onChange={setFilterEndDate} style={{ height: 32, fontSize: 11, padding: "8px 12px" }} />
-                </div>
+                <NeoDatePicker value={filterStartDate} onChange={setFilterStartDate} placeholder="From" style={{ height: 28, fontSize: 10, padding: "4px 8px", minWidth: 70 }} wrapperStyle={{ flex: "1 1 70px" }} />
+                <NeoDatePicker value={filterEndDate} onChange={setFilterEndDate} placeholder="To" style={{ height: 28, fontSize: 10, padding: "4px 8px", minWidth: 70 }} wrapperStyle={{ flex: "1 1 70px" }} />
               </div>
 
             <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
@@ -2374,7 +2451,7 @@ export default function NeoApp() {
                           </div>
                         )}
                         <SwipeRow onDelete={() => deleteTx(t.id)}>
-                      <NeoSurface style={{ padding: "12px 14px", display: "flex", alignItems: "center", gap: 10, borderRadius: 20 }}>
+                      <NeoSurface onClick={() => openEdit(t)} style={{ padding: "12px 14px", display: "flex", alignItems: "center", gap: 10, borderRadius: 20, cursor: "pointer" }}>
                         <div style={{
                           width: 36, height: 36, borderRadius: 12, flexShrink: 0, background: theme.bg,
                           boxShadow: theme.shadowRaisedSm, display: "flex", alignItems: "center", justifyContent: "center",
@@ -2402,7 +2479,6 @@ export default function NeoApp() {
                           <span style={{ fontSize: 14, fontWeight: 700, color: t.type === "income" ? theme.success : theme.danger, ...fontBody }}>
                             {t.type === "income" ? "+" : "-"}{formatCurrency(t.amount, baseCurrency)}
                           </span>
-                          <button onClick={() => openEdit(t)} style={{ border: "none", background: "none", color: theme.textSecondary }}><Pencil size={14} /></button>
                         </div>
                       </NeoSurface>
                     </SwipeRow>
@@ -2411,7 +2487,7 @@ export default function NeoApp() {
                   });
                 })()}
               </div>
-            </div>
+            </CollapsibleSection>
 
             {showBudgetModal && (
               <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 50, padding: 20 }}>

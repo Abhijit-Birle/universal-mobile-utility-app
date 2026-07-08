@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useMemo, useCallback } from "react"
 import { GoogleGenAI } from "@google/genai";
 import { Haptics, ImpactStyle } from "@capacitor/haptics";
 import { Preferences } from '@capacitor/preferences';
+import { App as CapacitorApp } from '@capacitor/app';
 import {
   Timer as TimerIcon,
   Wallet,
@@ -57,7 +58,7 @@ import {
   Bell,
   Camera,
   Download,
-  Zap,
+  ChevronUp,
   ChevronDown,
   Layers,
   Split,
@@ -71,9 +72,15 @@ import {
   Square,
   MonitorPlay,
   Settings,
+  Volume2,
+  VolumeX,
+  Flower2,
 } from "lucide-react";
 import Strands from "./components/Strands";
 import BreathingExercise from "./components/BreathingExercise";
+import MoneyTab from "./tabs/MoneyTab.jsx";
+import TodoTab from "./tabs/TodoTab.jsx";
+import { useTodos } from "./hooks/useTodos.js";
 import {
   ResponsiveContainer,
   BarChart,
@@ -93,6 +100,11 @@ const EXPENSE_CATEGORIES = [
   "Food", "Transport", "Shopping", "Bills", "Entertainment", "Health", "Education", "Other",
 ];
 const INCOME_CATEGORIES = ["Salary", "Freelance", "Business", "Investment", "Gift", "Other"];
+
+const CATEGORY_EMOJIS = {
+  Food: "🍔", Transport: "🚕", Shopping: "🛍️", Bills: "📄", Entertainment: "🎬", Health: "💊", Education: "📚",
+  Salary: "💼", Freelance: "💻", Business: "🏢", Investment: "📈", Gift: "🎁", Other: "📦",
+};
 const UPI_APPS = ["BHIM", "PhonePe", "GPay", "Paytm"];
 const MUSIC_OPTIONS = [
   { id: "piano", label: "Piano" },
@@ -157,11 +169,39 @@ function fmtClock(totalSeconds) {
   return `${m}:${s}`;
 }
 
+const EXPENSE_KEYWORD_MAP = {
+  Food: ["mcdonalds", "starbucks", "lunch", "dinner", "breakfast", "grocery", "groceries", "swiggy", "zomato", "restaurant", "cafe", "coffee", "pizza", "burger"],
+  Transport: ["uber", "ola", "gas", "petrol", "taxi", "bus", "train", "flight", "metro", "auto"],
+  Bills: ["netflix", "spotify", "wifi", "internet", "electricity", "water", "rent", "emi", "mobile", "recharge", "prime"],
+  Shopping: ["amazon", "flipkart", "myntra", "clothes", "shoes", "electronics", "mall", "zara", "h&m"],
+  Health: ["doctor", "pharmacy", "medicine", "hospital", "gym", "workout", "clinic", "therapy"],
+  Education: ["course", "udemy", "school", "college", "tuition", "books", "coursera"],
+  Entertainment: ["movie", "cinema", "game", "steam", "concert", "party", "club"]
+};
 
+function Numpad({ value, onChange, theme, NeoSurface }) {
+  const handlePress = (num) => {
+    Haptics.impact({ style: ImpactStyle.Light }).catch(()=>{});
+    if (num === "C") return onChange("");
+    if (num === "⌫") return onChange(value.slice(0, -1));
+    if (num === "." && value.includes(".")) return;
+    if (value === "0" && num !== ".") return onChange(num);
+    onChange(value + num);
+  };
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, marginTop: 12 }}>
+      {["1","2","3","4","5","6","7","8","9",".","0","⌫"].map(btn => (
+        <NeoSurface key={btn} onClick={() => handlePress(btn)} style={{ padding: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, fontWeight: 700, cursor: 'pointer', userSelect: 'none', color: theme.textPrimary }}>
+          {btn}
+        </NeoSurface>
+      ))}
+    </div>
+  );
+}
 
 /* ---------------------------------- root ---------------------------------- */
 
-const TAB_ORDER = ["timer", "expense", "todo", "insights"];
+const TAB_ORDER = ["timer", "meditation", "expense", "todo", "insights"];
 
 
 const useLocalStorage = (key, initialValue) => {
@@ -247,6 +287,8 @@ export default function NeoApp() {
     const [audioUrl, setAudioUrl] = useState(null);
     const [youtubeId, setYoutubeId] = useState(null);
     const [isPlaying, setIsPlaying] = useState(false);
+    const [volume, setVolume] = useState(0.5);
+    const [isMuted, setIsMuted] = useState(false);
     const fileInputRef = useRef(null);
     const audioRef = useRef(null);
 
@@ -346,10 +388,20 @@ export default function NeoApp() {
     }, [activeSource]);
 
     useEffect(() => {
+      if (audioRef.current) {
+        audioRef.current.volume = isMuted ? 0 : volume;
+      }
+      if (activeSource === 'youtube' && ytPlayerRef.current && ytPlayerRef.current.setVolume) {
+        ytPlayerRef.current.setVolume(isMuted ? 0 : volume * 100);
+      }
+    }, [volume, isMuted, activeSource]);
+
+    useEffect(() => {
       if (!audioRef.current || audioRef.current.src) return;
       if (['piano', 'rain', 'ocean', 'white', 'forest', 'shlokas', 'mozart', 'endel', 'cafe'].includes(activeSource)) {
         audioRef.current.src = `audio/${activeSource}.mp3`;
         audioRef.current.loop = true;
+        audioRef.current.volume = volume;
       }
     }, []);
 
@@ -408,10 +460,11 @@ export default function NeoApp() {
     const [showTodoPicker, setShowTodoPicker] = useState(false);
     const [showNoteModal, setShowNoteModal] = useState(false);
     const [sessionNote, setSessionNote] = useState("");
+    const [currentSessionId, setCurrentSessionId] = useState(null);
 
   const [transactions, setTransactions] = useLocalStorage("neo_transactions", []);
-  const [todos, setTodos] = useLocalStorage("neo_todos", []);
-    const [categoryBudgets, setCategoryBudgets] = useLocalStorage("neo_categoryBudgets", {});
+  const { todos, incrementPomodoro, toggleDone, updateTodo } = useTodos();
+  const [categoryBudgets, setCategoryBudgets] = useLocalStorage("neo_categoryBudgets", {});
   const [balances, setBalances] = useLocalStorage("neo_balances", { bank: 14250.00, cash: 340.50 });
   const [upcomingBills, setUpcomingBills] = useLocalStorage("neo_upcomingBills", [
     { id: 1, name: "Netflix", amount: 649, daysLeft: 2 },
@@ -448,11 +501,17 @@ export default function NeoApp() {
   const [newDesc, setNewDesc] = useState("");
   const [newCat, setNewCat] = useState("Food");
   const [newType, setNewType] = useState("expense");
-  const [newDate, setNewDate] = useState("");
+  const getLocalToday = () => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  };
+  const [newDate, setNewDate] = useState(getLocalToday());
+  const [showCategoryDrawer, setShowCategoryDrawer] = useState(false);
   const [newMethod, setNewMethod] = useState("Cash");
   const [editingTxId, setEditingTxId] = useState(null);
   const [activeAccount, setActiveAccount] = useState("bank");
   const [showBudgetModal, setShowBudgetModal] = useState(false);
+  const [showBudgetDropdown, setShowBudgetDropdown] = useState(false);
   const [editCategory, setEditCategory] = useState("Food");
   const [editBudgetVal, setEditBudgetVal] = useState("");
 
@@ -467,14 +526,6 @@ export default function NeoApp() {
   ];
         const [darkMode, setDarkMode] = useLocalStorage("neo_darkMode", false);
   
-  // Migrate old todos to have a date of today if they don't have one
-  useEffect(() => {
-    if (todos.some(t => !t.date)) {
-      const todayStr = new Date().toISOString().split('T')[0];
-      setTodos(ts => ts.map(t => t.date ? t : { ...t, date: todayStr }));
-    }
-  }, [todos, setTodos]);
-
   // Sync today's tasks to Capacitor Preferences for Android Widget
   useEffect(() => {
     const syncToNativeWidget = async () => {
@@ -493,13 +544,6 @@ export default function NeoApp() {
     };
     syncToNativeWidget();
   }, [todos]);
-
-  const [todoInput, setTodoInput] = useState("");
-  const [expandedId, setExpandedId] = useState(null);
-  const [newPriority, setNewPriority] = useState("Medium");
-  const [showReminder, setShowReminder] = useState(false);
-  const [showTaskOptions, setShowTaskOptions] = useState(false);
-  const [newRecurringDays, setNewRecurringDays] = useState([]);
 
   // Planner States
 
@@ -525,6 +569,33 @@ export default function NeoApp() {
   const [showSettings, setShowSettings] = useState(false);
   const [syncState, setSyncState] = useState("synced"); // synced | syncing
   const touchData = useRef({ x: 0, y: 0, active: false });
+
+  // Handle Hardware Back Button (Android)
+  useEffect(() => {
+    let listener = null;
+    const initListener = async () => {
+      listener = await CapacitorApp.addListener('backButton', () => {
+        if (showForm) { setShowForm(false); return; }
+        if (showBudgetModal) { setShowBudgetModal(false); return; }
+        if (showBudgetDropdown) { setShowBudgetDropdown(false); return; }
+        if (showBanksList) { setShowBanksList(false); return; }
+        if (showCategoryDrawer) { setShowCategoryDrawer(false); return; }
+        if (showNoteModal) { setShowNoteModal(false); return; }
+        if (showDailyGoalModal) { setShowDailyGoalModal(false); return; }
+        if (showSettings) { setShowSettings(false); return; }
+        if (showKeyModal) { setShowKeyModal(false); return; }
+        if (showSearch) { setShowSearch(false); return; }
+        
+        // If no modal is open, exit the app
+        CapacitorApp.exitApp();
+      });
+    };
+    initListener();
+    
+    return () => {
+      if (listener) listener.remove();
+    };
+  }, [showForm, showBudgetModal, showBudgetDropdown, showBanksList, showCategoryDrawer, showNoteModal, showDailyGoalModal, showSettings, showKeyModal, showSearch]);
 
   const switchTab = (newTab) => {
     if (newTab === activeTab) return;
@@ -563,11 +634,15 @@ export default function NeoApp() {
     shadowPressed: darkMode
       ? "inset 8px 8px 16px #1b1e25, inset -8px -8px 16px #313747"
       : "inset 8px 8px 16px #b7bdc8, inset -8px -8px 16px #ffffff",
+    shadowInset: darkMode
+      ? "inset 4px 4px 8px #1b1e25, inset -4px -4px 8px #313747"
+      : "inset 4px 4px 8px #b7bdc8, inset -4px -4px 8px #ffffff",
     textPrimary: darkMode ? "#e2e6f0" : "#2d3446",
     textSecondary: darkMode ? "#8991a3" : "#7c8494",
     accent: "#7c6ff0",
     accent2: "#3dd6c8",
     danger: "#ff6b6b",
+    success: "#2ecc71",
     border: darkMode ? "#323848" : "#ffffff",
   }), [darkMode]);
 
@@ -594,7 +669,10 @@ export default function NeoApp() {
 
   const IconBtn = useCallback(({ icon, onClick, active, size = 44 }) => (
     <button
-      onClick={onClick}
+      onClick={(e) => {
+        Haptics.impact({ style: ImpactStyle.Light }).catch(()=>{});
+        if (onClick) onClick(e);
+      }}
       style={{
         width: size,
         height: size,
@@ -615,7 +693,10 @@ export default function NeoApp() {
 
   const Chip = useCallback(({ label, active, onClick, colorActive }) => (
     <button
-      onClick={onClick}
+      onClick={(e) => {
+        Haptics.impact({ style: ImpactStyle.Light }).catch(()=>{});
+        if (onClick) onClick(e);
+      }}
       style={{
         padding: "8px 14px",
         borderRadius: 14,
@@ -635,7 +716,10 @@ export default function NeoApp() {
 
   const PrimaryButton = useCallback(({ label, icon, onClick, style }) => (
     <button
-      onClick={onClick}
+      onClick={(e) => {
+        Haptics.impact({ style: ImpactStyle.Medium }).catch(()=>{});
+        if (onClick) onClick(e);
+      }}
       style={{
         background: `linear-gradient(135deg, ${theme.accent}, #5a4fcf)`,
         color: "#fff",
@@ -665,7 +749,7 @@ export default function NeoApp() {
         width: "100%",
         boxSizing: "border-box",
         background: theme.bg,
-        boxShadow: theme.shadowPressed,
+        boxShadow: theme.shadowInset,
         border: "none",
         borderRadius: 14,
         padding: "12px 14px",
@@ -684,7 +768,7 @@ export default function NeoApp() {
     </div>
   ), [theme]);
 
-  const WheelPicker = useCallback(({ options, value, onChange, label, disabled = false }) => {
+  const WheelPicker = useCallback(({ options, value, onChange, label, disabled = false, width = 60, fontSize = 24, formatOption }) => {
     const containerRef = useRef(null);
     const itemHeight = 44;
 
@@ -718,7 +802,7 @@ export default function NeoApp() {
           onScroll={handleScroll}
           style={{ 
             height: itemHeight * 3, 
-            width: 60, 
+            width: width, 
             overflowY: 'auto', 
             scrollSnapType: 'y mandatory',
             scrollbarWidth: 'none',
@@ -737,7 +821,7 @@ export default function NeoApp() {
                 alignItems: 'center', 
                 justifyContent: 'center',
                 scrollSnapAlign: 'center',
-                fontSize: 24,
+                fontSize: fontSize,
                 fontWeight: 700,
                 color: opt === value ? theme.textPrimary : theme.textSecondary,
                 opacity: opt === value ? 1 : 0.3,
@@ -745,7 +829,7 @@ export default function NeoApp() {
                 ...fontDisplay
               }}
             >
-              {opt.toString().padStart(2, '0')}
+              {formatOption ? formatOption(opt) : opt.toString().padStart(2, '0')}
             </div>
           ))}
           <div style={{ height: itemHeight }} /> {/* padding bottom */}
@@ -753,6 +837,116 @@ export default function NeoApp() {
         <div style={{ color: theme.textSecondary, fontSize: 14, fontWeight: 600, ...fontBody }}>
           {label}
         </div>
+      </div>
+    );
+  }, [theme]);
+
+  const NeoDatePicker = useCallback(({ value, onChange }) => {
+    const [open, setOpen] = useState(false);
+    const containerRef = useRef(null);
+
+    useEffect(() => {
+      const handleClickOutside = (e) => {
+        if (containerRef.current && !containerRef.current.contains(e.target)) {
+          setOpen(false);
+        }
+      };
+      document.addEventListener("mousedown", handleClickOutside);
+      return () => document.removeEventListener("mousedown", handleClickOutside);
+    }, []);
+
+    const current = value ? new Date(value) : new Date();
+    const [viewDate, setViewDate] = useState(current);
+
+    const year = viewDate.getFullYear();
+    const month = viewDate.getMonth();
+    
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const firstDayOfMonth = new Date(year, month, 1).getDay();
+
+    const handleSelect = (day) => {
+      const newDate = new Date(year, month, day);
+      const yyyy = newDate.getFullYear();
+      const mm = String(newDate.getMonth() + 1).padStart(2, '0');
+      const dd = String(newDate.getDate()).padStart(2, '0');
+      onChange(`${yyyy}-${mm}-${dd}`);
+      setOpen(false);
+    };
+
+    const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+
+    return (
+      <div ref={containerRef} style={{ position: 'relative', flex: 1 }}>
+        <div 
+          onClick={() => setOpen(!open)}
+          style={{
+            width: "100%",
+            boxSizing: "border-box",
+            background: theme.bg,
+            boxShadow: theme.shadowInset,
+            border: "none",
+            borderRadius: 14,
+            padding: "12px 14px",
+            height: 44,
+            display: "flex",
+            alignItems: "center",
+            color: value ? theme.textPrimary : theme.textSecondary,
+            fontSize: 14,
+            cursor: "pointer",
+            ...fontBody
+          }}
+        >
+          {value || "Select Date"}
+        </div>
+
+        {open && (
+          <div style={{ position: 'absolute', top: 50, left: 0, zIndex: 100, width: 280 }}>
+            <NeoSurface style={{ padding: 16 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                <IconBtn size={32} icon={<ChevronLeft size={16} />} onClick={() => setViewDate(new Date(year, month - 1, 1))} />
+                <div style={{ fontWeight: 700, fontSize: 14, color: theme.textPrimary, ...fontDisplay }}>
+                  {monthNames[month]} {year}
+                </div>
+                <IconBtn size={32} icon={<ChevronRight size={16} />} onClick={() => setViewDate(new Date(year, month + 1, 1))} />
+              </div>
+              
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 6 }}>
+                {["S", "M", "T", "W", "T", "F", "S"].map((d, i) => (
+                  <div key={i} style={{ textAlign: "center", fontSize: 11, color: theme.textSecondary, fontWeight: 700, ...fontBody }}>{d}</div>
+                ))}
+                {Array.from({ length: firstDayOfMonth }).map((_, i) => <div key={`pad-${i}`} />)}
+                {Array.from({ length: daysInMonth }).map((_, i) => {
+                  const day = i + 1;
+                  const isSelected = value && current.getDate() === day && current.getMonth() === month && current.getFullYear() === year;
+                  const isToday = new Date().getDate() === day && new Date().getMonth() === month && new Date().getFullYear() === year;
+                  
+                  return (
+                    <div 
+                      key={day}
+                      onClick={() => handleSelect(day)}
+                      style={{
+                        height: 32,
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        fontSize: 13,
+                        fontWeight: isSelected || isToday ? 700 : 500,
+                        color: isSelected ? "#fff" : (isToday ? theme.accent : theme.textPrimary),
+                        background: isSelected ? theme.accent : "transparent",
+                        borderRadius: 10,
+                        cursor: "pointer",
+                        transition: "all 0.2s",
+                        ...fontBody
+                      }}
+                    >
+                      {day}
+                    </div>
+                  );
+                })}
+              </div>
+            </NeoSurface>
+          </div>
+        )}
       </div>
     );
   }, [theme]);
@@ -771,11 +965,15 @@ export default function NeoApp() {
         playAlarm();
         if (mode === "pomodoro") {
           if (pomoPhase === "Focus") {
+            const sid = Date.now();
+            setCurrentSessionId(sid);
+            const lTodo = todos.find(t=>t.id === linkedTodo);
             setHistory((h) => [
-              { id: Date.now(), name: name || autoTimerName(minutes), minutes, date: "Just now" },
+              { id: sid, name: name || autoTimerName(minutes), minutes, date: new Date().toISOString(), category: lTodo ? lTodo.category : 'Personal', note: "" },
               ...h,
             ]);
             setStreak((s) => s + 1);
+            if (linkedTodo) incrementPomodoro(linkedTodo);
             setShowNoteModal(true);
             setPomoPhase("Break");
             setHours(0); setMinutes(pomoCycle % 4 === 0 ? 15 : 5); setSeconds(0);
@@ -785,8 +983,11 @@ export default function NeoApp() {
             setHours(0); setMinutes(25); setSeconds(0);
           }
         } else {
+          const sid = Date.now();
+          setCurrentSessionId(sid);
+          const lTodo = todos.find(t=>t.id === linkedTodo);
           setHistory((h) => [
-            { id: Date.now(), name: name || autoTimerName(minutes), minutes, date: "Just now" },
+            { id: sid, name: name || autoTimerName(minutes), minutes, date: new Date().toISOString(), category: lTodo ? lTodo.category : 'Personal', note: "" },
             ...h,
           ]);
           setShowNoteModal(true);
@@ -806,7 +1007,7 @@ export default function NeoApp() {
       else if (audioRef.current) audioRef.current.pause();
     };
   const renderTimerTab = () => {
-    const LINKABLE_TODOS = todos.filter(t => !t.done).map(t => t.text);
+    const LINKABLE_TODOS = todos.filter(t => !t.done);
 
     // Pomodoro mode
 
@@ -830,10 +1031,30 @@ export default function NeoApp() {
 
     // Post-session note
 
-
-
+    // Analytics Data
     
+    // Heatmap Data (Last 28 days)
+    const last28Days = Array.from({length: 28}).map((_, i) => {
+      const d = new Date();
+      d.setDate(d.getDate() - (27 - i));
+      return d.toISOString().split("T")[0];
+    });
+    
+    const heatmapData = last28Days.map(dateStr => {
+      const sum = history.filter(h => h.date && h.date.startsWith(dateStr)).reduce((a, b) => a + b.minutes, 0);
+      return { date: dateStr, minutes: sum };
+    });
 
+    // Time Distribution (Today)
+    const historyToday = history.filter(h => h.date && (h.date.startsWith(todayStr) || h.date === "Just now"));
+    const distribution = historyToday.reduce((acc, h) => {
+      const cat = h.category || "Personal";
+      acc[cat] = (acc[cat] || 0) + h.minutes;
+      return acc;
+    }, {});
+    const catColors = { Work: theme.accent, Study: theme.accent2, Personal: "#ff9f43", undefined: "#9e9e9e" };
+    const distTotal = Object.values(distribution).reduce((a,b)=>a+b, 0) || 1;
+    let distAccum = 0;
 
     const svgSize = 280;
     const center = svgSize / 2;
@@ -854,12 +1075,14 @@ export default function NeoApp() {
         };
     });
 
-    const toggleStart = () => {
-      initAudioCtx();
+    const toggleTimer = () => {
       stopAlarm();
       if (!isRunning && !name) setName(autoTimerName(minutes));
+      
       const willRun = !isRunning;
       setIsRunning(willRun);
+      
+      initAudioCtx();
       setIsPlaying(willRun);
       if (willRun) {
         if (activeSource === 'youtube' && ytPlayerRef.current && ytPlayerRef.current.playVideo) ytPlayerRef.current.playVideo();
@@ -872,7 +1095,6 @@ export default function NeoApp() {
 
     return (
       <div style={{ padding: "18px 18px 100px" }}>
-        <BreathingExercise theme={theme} darkMode={darkMode} />
         <div style={{ display: "flex", alignItems: "center", justifyContent: "center", position: "relative", marginBottom: 14 }}>
           <div style={{ display: "flex", gap: 4, background: theme.bg, boxShadow: theme.shadowPressed, borderRadius: 14, padding: 4 }}>
             {["focus", "pomodoro"].map((m) => (
@@ -904,64 +1126,111 @@ export default function NeoApp() {
           </NeoSurface>
         )}
 
-        <NeoSurface style={{ padding: 24, display: "flex", flexDirection: "column", alignItems: "center", position: "relative", overflow: "hidden" }}>
-          <div style={{ position: "relative", zIndex: 1, display: "flex", justifyContent: "center", alignItems: "center", height: svgSize, gap: 16 }}>
-            <WheelPicker 
-              options={Array.from({length: 24}, (_, i) => i)} 
-              value={isRunning ? Math.floor(remaining / 3600) : hours} 
-              onChange={setHours} 
-              label="hours" 
-              disabled={isRunning}
-            />
-            <WheelPicker 
-              options={Array.from({length: 60}, (_, i) => i)} 
-              value={isRunning ? Math.floor((remaining % 3600) / 60) : minutes} 
-              onChange={setMinutes} 
-              label="min" 
-              disabled={isRunning}
-            />
-            <WheelPicker 
-              options={Array.from({length: 60}, (_, i) => i)} 
-              value={isRunning ? remaining % 60 : seconds} 
-              onChange={setSeconds} 
-              label="sec" 
-              disabled={isRunning}
-            />
-          </div>
-
-          <div style={{ marginTop: 18, width: "100%", position: "relative", zIndex: 1 }}>
+        <NeoSurface style={{ padding: "32px", display: "flex", flexDirection: "column", alignItems: "center", position: "relative", overflow: "hidden", maxWidth: 460, margin: "0 auto" }}>
+          
+          <div style={{ width: "100%", position: "relative", zIndex: 1, marginBottom: 32 }}>
             <NeoInput
               placeholder={autoTimerName(minutes) + " (auto if left blank)"}
               value={name}
               onChange={(e) => setName(e.target.value)}
+              style={{ textAlign: "center", fontSize: 15, fontWeight: 600 }}
             />
+            
+            <button onClick={() => setShowTodoPicker((v) => !v)} style={{
+              marginTop: 14, width: "100%", border: "none", background: theme.bg, boxShadow: theme.shadowRaisedSm,
+              borderRadius: 14, padding: "14px 16px", display: "flex", alignItems: "center", gap: 8, color: linkedTodo ? theme.accent : theme.textSecondary, fontSize: 13, fontWeight: 600, ...fontBody, cursor: "pointer"
+            }}>
+              <Target size={16} />
+              {linkedTodo ? `Focus on: ${todos.find(t => t.id === linkedTodo)?.text || 'Unknown Task'}` : "Link to a todo (optional)"}
+              <ChevronDown size={16} style={{ marginLeft: "auto" }} />
+            </button>
+            {showTodoPicker && (
+              <div style={{ position: "relative", zIndex: 2, width: "100%", marginTop: 8, display: "flex", flexDirection: "column", gap: 6, maxHeight: 180, overflowY: "auto", padding: 4 }}>
+                <button onClick={() => { setLinkedTodo(null); setShowTodoPicker(false); }} style={{
+                    textAlign: "left", border: "none", background: theme.bg, boxShadow: theme.shadowPressed, borderRadius: 12,
+                    padding: "10px 14px", color: theme.textSecondary, fontSize: 13, fontWeight: 500, ...fontBody, cursor: "pointer"
+                  }}>None</button>
+                {LINKABLE_TODOS.map((t) => (
+                  <button key={t.id} onClick={() => { setLinkedTodo(t.id); setShowTodoPicker(false); }} style={{
+                    textAlign: "left", border: "none", background: theme.bg, boxShadow: theme.shadowPressed, borderRadius: 12,
+                    padding: "10px 14px", color: theme.textPrimary, fontSize: 13, fontWeight: 500, ...fontBody, display: "flex", justifyContent: "space-between", cursor: "pointer"
+                  }}>
+                    <span>{t.text}</span>
+                    <span style={{ color: theme.accent, fontSize: 12, fontWeight: 600 }}>🍅 {t.pomodorosCompleted || 0}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+            {linkedTodo && (() => {
+              const t = todos.find(x => x.id === linkedTodo);
+              if (!t) return null;
+              return (
+                <div style={{ marginTop: 14, width: "100%", position: "relative", zIndex: 1, display: "flex", alignItems: "center", gap: 12, padding: "14px 16px", borderRadius: 16, background: theme.bg, boxShadow: theme.shadowPressed }}>
+                   <button onClick={() => toggleDone(t.id)} style={{ width: 24, height: 24, borderRadius: "50%", border: "none", background: theme.bg, boxShadow: t.done ? theme.shadowPressed : theme.shadowRaisedSm, color: t.done ? theme.accent : "transparent", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0 }}>
+                     {t.done && <Check size={14} />}
+                   </button>
+                   <div style={{ flex: 1, display: "flex", flexDirection: "column" }}>
+                     <span style={{ color: t.done ? theme.textSecondary : theme.textPrimary, fontSize: 14, textDecoration: t.done ? "line-through" : "none", fontWeight: 500, ...fontBody }}>{t.text}</span>
+                     {t.note && <span style={{ color: theme.textSecondary, fontSize: 12, marginTop: 3, ...fontBody }}>{t.note.slice(0, 40)}{t.note.length > 40 ? '...' : ''}</span>}
+                   </div>
+                   <div style={{ display: "flex", alignItems: "center", gap: 8, background: `${theme.accent}15`, padding: "6px 12px", borderRadius: 14 }}>
+                     <span style={{ fontSize: 15 }}>🍅</span>
+                     <span style={{ color: theme.accent, fontSize: 14, fontWeight: 700, ...fontDisplay }}>
+                       {t.pomodorosCompleted || 0} <span style={{ opacity: 0.5 }}>/</span> {t.pomodorosEstimated || 0}
+                     </span>
+                     <div style={{ display: "flex", flexDirection: "column", gap: 3, marginLeft: 6 }}>
+                       <button onClick={() => updateTodo(t.id, { pomodorosEstimated: (t.pomodorosEstimated || 0) + 1 })} style={{ width: 16, height: 16, borderRadius: 5, background: theme.bg, border: "none", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: theme.textPrimary, boxShadow: theme.shadowRaisedSm }}><ChevronUp size={12} /></button>
+                       <button onClick={() => updateTodo(t.id, { pomodorosEstimated: Math.max(0, (t.pomodorosEstimated || 0) - 1) })} style={{ width: 16, height: 16, borderRadius: 5, background: theme.bg, border: "none", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: theme.textPrimary, boxShadow: theme.shadowRaisedSm }}><ChevronDown size={12} /></button>
+                     </div>
+                   </div>
+                </div>
+              );
+            })()}
           </div>
 
-          <button onClick={() => setShowTodoPicker((v) => !v)} style={{
-            position: "relative", zIndex: 1, marginTop: 10, width: "100%", border: "none", background: theme.bg, boxShadow: theme.shadowRaisedSm,
-            borderRadius: 12, padding: "10px 12px", display: "flex", alignItems: "center", gap: 8, color: linkedTodo ? theme.accent : theme.textSecondary, fontSize: 12.5, fontWeight: 600, ...fontBody,
-          }}>
-            <Target size={14} />
-            {linkedTodo ? `Focus on: ${linkedTodo}` : "Link to a todo (optional)"}
-            <ChevronDown size={14} style={{ marginLeft: "auto" }} />
-          </button>
-          {showTodoPicker && (
-            <div style={{ position: "relative", zIndex: 2, width: "100%", marginTop: 8, display: "flex", flexDirection: "column", gap: 6 }}>
-              {LINKABLE_TODOS.map((t) => (
-                <button key={t} onClick={() => { setLinkedTodo(t); setShowTodoPicker(false); }} style={{
-                  textAlign: "left", border: "none", background: theme.bg, boxShadow: theme.shadowPressed, borderRadius: 10,
-                  padding: "9px 12px", color: theme.textPrimary, fontSize: 12, ...fontBody,
-                }}>{t}</button>
-              ))}
+          {!isRunning ? (
+            <div style={{ position: "relative", zIndex: 1, display: "flex", justifyContent: "center", alignItems: "center", height: svgSize, gap: 16 }}>
+              <WheelPicker 
+                options={Array.from({length: 24}, (_, i) => i)} 
+                value={hours} 
+                onChange={setHours} 
+                label="hours" 
+              />
+              <WheelPicker 
+                options={Array.from({length: 60}, (_, i) => i)} 
+                value={minutes} 
+                onChange={setMinutes} 
+                label="min" 
+              />
+              <WheelPicker 
+                options={Array.from({length: 60}, (_, i) => i)} 
+                value={seconds} 
+                onChange={setSeconds} 
+                label="sec" 
+              />
+            </div>
+          ) : (
+            <div style={{ position: "relative", zIndex: 1, display: "flex", justifyContent: "center", alignItems: "center", height: 260, width: "100%" }}>
+              <div style={{ width: 240, height: 240, borderRadius: "50%", background: theme.bg, boxShadow: theme.shadowRaised, display: "flex", flexDirection: "column", justifyContent: "center", alignItems: "center", position: "relative" }}>
+                 <div style={{ position: "absolute", inset: 12, borderRadius: "50%", border: `4px solid ${theme.accent}33` }} />
+                 <svg style={{ position: "absolute", inset: 0, width: "100%", height: "100%", transform: "rotate(-90deg)" }}>
+                   <circle cx="120" cy="120" r="108" fill="none" stroke={theme.accent} strokeWidth="8" strokeLinecap="round" strokeDasharray="678" strokeDashoffset={678 - (remaining / (hours * 3600 + minutes * 60 + seconds || 1)) * 678} style={{ transition: "stroke-dashoffset 1s linear" }} />
+                 </svg>
+                 <div style={{ width: 200, height: 200, borderRadius: "50%", background: theme.bg, boxShadow: theme.shadowPressed, display: "flex", flexDirection: "column", justifyContent: "center", alignItems: "center", zIndex: 1 }}>
+                   <span style={{ fontSize: 56, fontWeight: 800, color: theme.accent, ...fontDisplay, letterSpacing: -1, lineHeight: 1 }}>
+                     {Math.floor((remaining % 3600) / 60).toString().padStart(2, '0')}:{(remaining % 60).toString().padStart(2, '0')}
+                   </span>
+                   {hours > 0 && <span style={{ fontSize: 16, color: theme.textSecondary, fontWeight: 600, marginTop: 4 }}>{Math.floor(remaining / 3600)} hr</span>}
+                 </div>
+               </div>
             </div>
           )}
 
-        </NeoSurface>
-
-        <div style={{ marginTop: 22 }}>
-          <SectionLabel>AMBIENCE / MUSIC</SectionLabel>
-          <NeoSurface style={{ padding: 20, display: "flex", flexDirection: "column" }}>
-            {/* Horizontal Tabs */}
+          {/* Ambience Integrated Section */}
+          <div style={{ marginTop: 32, width: "100%", position: "relative", zIndex: 1 }}>
+            <div style={{ color: theme.textSecondary, fontSize: 12, fontWeight: 700, marginBottom: 12, textAlign: "center", textTransform: "uppercase", letterSpacing: 1 }}>
+              Focus Music: {MUSIC_OPTIONS.find(m => m.id === activeSource)?.label}
+            </div>
             <div onTouchStart={(e) => e.stopPropagation()} onMouseDown={(e) => e.stopPropagation()} style={{ display: "flex", gap: 10, overflowX: "auto", paddingBottom: 10, scrollbarWidth: "none", msOverflowStyle: "none" }}>
               {MUSIC_OPTIONS.map((m) => {
                 const isActive = activeSource === m.id;
@@ -979,11 +1248,11 @@ export default function NeoApp() {
                       }
                     }}
                     style={{
-                      padding: "12px 24px",
-                      borderRadius: 16,
+                      padding: "10px 16px",
+                      borderRadius: 14,
                       border: "none",
                       fontWeight: 600,
-                      fontSize: 13,
+                      fontSize: 12,
                       whiteSpace: "nowrap",
                       display: "flex",
                       alignItems: "center",
@@ -992,12 +1261,13 @@ export default function NeoApp() {
                       color: isActive ? "#fff" : theme.textSecondary,
                       boxShadow: isActive ? "inset 2px 2px 5px rgba(0,0,0,0.2), inset -2px -2px 5px rgba(255,255,255,0.1)" : theme.shadowRaisedSm,
                       transition: "all 0.3s ease",
-                      cursor: "pointer"
+                      cursor: "pointer",
+                      flexShrink: 0
                     }}
                   >
                     {m.label}
                     {isActive && (
-                      <div style={{ display: "flex", alignItems: "flex-end", gap: 3, height: 12, marginLeft: 4 }}>
+                      <div style={{ display: "flex", alignItems: "flex-end", gap: 3, height: 10, marginLeft: 4 }}>
                          <div style={{ width: 3, height: "100%", background: "#fff", borderRadius: 2, transformOrigin: "bottom", animation: isPlaying ? "eqBounce 0.6s infinite ease-in-out alternate" : "none" }} />
                          <div style={{ width: 3, height: "100%", background: "#fff", borderRadius: 2, transformOrigin: "bottom", animation: isPlaying ? "eqBounce 0.5s infinite ease-in-out alternate 0.2s" : "none" }} />
                          <div style={{ width: 3, height: "100%", background: "#fff", borderRadius: 2, transformOrigin: "bottom", animation: isPlaying ? "eqBounce 0.7s infinite ease-in-out alternate 0.4s" : "none" }} />
@@ -1007,65 +1277,51 @@ export default function NeoApp() {
                 );
               })}
             </div>
+          </div>
 
-            {/* Progress Bar (Visual Loop) */}
-            <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 14 }}>
-              <span style={{ fontSize: 11, color: theme.textSecondary, fontWeight: 500 }}>0:00</span>
-              <div style={{ flex: 1, height: 6, background: darkMode ? "#1b1e25" : "#e0e5ed", borderRadius: 3, overflow: "hidden", position: "relative", boxShadow: "inset 1px 1px 3px rgba(0,0,0,0.2)" }}>
-                {isPlaying && (
-                  <div style={{ position: "absolute", height: "100%", background: theme.accent, borderRadius: 3, animation: "progressGlide 8s infinite linear" }} />
-                )}
-              </div>
-              <span style={{ fontSize: 11, color: theme.textSecondary, fontWeight: 500 }}>∞</span>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 20, marginTop: 24, position: "relative", zIndex: 1, width: "100%" }}>
+            
+            <div style={{ display: "flex", alignItems: "center", gap: 8, background: theme.bg, padding: "8px 12px", borderRadius: 20, boxShadow: theme.shadowPressed, flex: 1, maxWidth: 130 }}>
+              <button onClick={() => setIsMuted(m => !m)} style={{ background: "none", border: "none", cursor: "pointer", display: "flex", padding: 0, color: theme.textSecondary }}>
+                {isMuted || volume === 0 ? <VolumeX size={16} /> : <Volume2 size={16} />}
+              </button>
+              <input type="range" min="0" max="1" step="0.05" value={isMuted ? 0 : volume} onChange={(e) => { setVolume(parseFloat(e.target.value)); setIsMuted(false); }} style={{ width: "100%", accentColor: theme.accent, height: 4 }} />
             </div>
 
-            {/* Controls */}
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 24 }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 18 }}>
-                <button
-                  onClick={toggleStart}
-                  style={{
-                    width: 58, height: 58, borderRadius: "50%", border: `2px solid ${darkMode ? "#2b2f3a" : "#d1d5db"}`,
-                    background: theme.bg, display: "flex", alignItems: "center", justifyContent: "center",
-                    boxShadow: theme.shadowRaisedSm, cursor: "pointer", transition: "all 0.2s"
-                  }}
-                >
-                  <div style={{
-                    width: 44, height: 44, borderRadius: "50%",
-                    background: `linear-gradient(135deg, ${theme.accent}, #5a4fcf)`,
-                    color: "#fff", display: "flex", alignItems: "center", justifyContent: "center",
-                    boxShadow: "inset 2px 2px 5px rgba(0,0,0,0.2)"
-                  }}>
-                    {isPlaying ? <Square size={16} fill="currentColor" /> : <Play size={18} fill="currentColor" style={{ marginLeft: 3 }} />}
-                  </div>
-                </button>
-                <button 
-                  onClick={resetTimer}
-                  style={{ 
-                    width: 40, height: 40, borderRadius: "50%", background: theme.bg, border: "none", 
-                    boxShadow: theme.shadowPressed, display: "flex", alignItems: "center", justifyContent: "center",
-                    color: theme.textSecondary, cursor: "pointer"
-                  }}
-                >
-                  <RotateCcw size={16} />
-                </button>
-                <button 
-                  onClick={() => { setIsRunning(false); setIsPlaying(false); if (audioRef.current) audioRef.current.pause(); }}
-                  style={{ 
-                    width: 40, height: 40, borderRadius: "50%", background: theme.bg, border: "none", 
-                    boxShadow: theme.shadowPressed, display: "flex", alignItems: "center", justifyContent: "center",
-                    color: theme.textSecondary, cursor: "pointer"
-                  }}
-                >
-                  <Square size={14} />
-                </button>
+            <button
+              onClick={toggleTimer}
+              style={{
+                width: 72, height: 72, borderRadius: "50%", border: `2px solid ${darkMode ? "#2b2f3a" : "#d1d5db"}`,
+                background: theme.bg, display: "flex", alignItems: "center", justifyContent: "center",
+                boxShadow: theme.shadowRaisedSm, cursor: "pointer", transition: "all 0.2s",
+                flexShrink: 0
+              }}
+            >
+              <div style={{
+                width: 56, height: 56, borderRadius: "50%",
+                background: `linear-gradient(135deg, ${theme.accent}, #5a4fcf)`,
+                color: "#fff", display: "flex", alignItems: "center", justifyContent: "center",
+                boxShadow: "inset 2px 2px 5px rgba(0,0,0,0.2)"
+              }}>
+                {isRunning ? <Pause size={22} fill="currentColor" /> : <Play size={24} fill="currentColor" style={{ marginLeft: 3 }} />}
               </div>
-              <div style={{ color: theme.textSecondary, fontSize: 12.5, fontWeight: 500 }}>
-                Playing: {MUSIC_OPTIONS.find(m => m.id === activeSource)?.label}
-              </div>
+            </button>
+
+            <div style={{ flex: 1, display: "flex", justifyContent: "flex-start", maxWidth: 130 }}>
+              <button 
+                onClick={resetTimer}
+                style={{ 
+                  width: 52, height: 52, borderRadius: "50%", background: theme.bg, border: "none", 
+                  boxShadow: theme.shadowPressed, display: "flex", alignItems: "center", justifyContent: "center",
+                  color: theme.textSecondary, cursor: "pointer"
+                }}
+              >
+                <RotateCcw size={20} />
+              </button>
             </div>
-          </NeoSurface>
-        </div>
+            
+          </div>
+        </NeoSurface>
 
         <div style={{ marginTop: 22 }}>
           <SectionLabel>Daily focus goal</SectionLabel>
@@ -1095,20 +1351,92 @@ export default function NeoApp() {
           </NeoSurface>
         </div>
 
+        {/* Analytics Grid */}
+        <div style={{ display: "flex", gap: 14, marginTop: 14 }}>
+          {/* Heatmap */}
+          <NeoSurface style={{ flex: 1.5, padding: 16, display: "flex", flexDirection: "column" }}>
+            <div style={{ color: theme.textSecondary, fontSize: 11.5, fontWeight: 600, marginBottom: 12, ...fontBody }}>30-DAY FOCUS HEATMAP</div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 6, width: "100%" }}>
+              {heatmapData.map((day, i) => {
+                const intensity = Math.min(day.minutes / 60, 1);
+                const bg = intensity > 0 
+                  ? `rgba(90, 79, 207, ${0.2 + intensity * 0.8})` 
+                  : theme.bg;
+                return (
+                  <div key={i} style={{ 
+                    aspectRatio: "1/1", 
+                    borderRadius: 4, 
+                    background: bg,
+                    boxShadow: intensity > 0 ? "none" : theme.shadowPressed,
+                    border: intensity > 0 ? "none" : `1px solid ${darkMode ? "#2b2f3a" : "#e0e5ed"}`
+                  }} title={`${day.date}: ${day.minutes}m`} />
+                );
+              })}
+            </div>
+          </NeoSurface>
 
+          {/* Time Distribution */}
+          <NeoSurface style={{ flex: 1, padding: 16, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
+            <div style={{ color: theme.textSecondary, fontSize: 11.5, fontWeight: 600, marginBottom: 12, width: "100%", ...fontBody }}>TODAY'S SPLIT</div>
+            {Object.keys(distribution).length === 0 ? (
+               <div style={{width: 64, height: 64, borderRadius: "50%", background: theme.bg, boxShadow: theme.shadowPressed}}></div>
+            ) : (
+              <svg width={64} height={64} viewBox="-1 -1 2 2" style={{ transform: "rotate(-90deg)", filter: "drop-shadow(2px 4px 6px rgba(0,0,0,0.15))" }}>
+                {Object.entries(distribution).map(([cat, val]) => {
+                  const ratio = val / distTotal;
+                  const startAngle = distAccum * Math.PI * 2;
+                  const endAngle = (distAccum + ratio) * Math.PI * 2;
+                  distAccum += ratio;
+                  
+                  const x1 = Math.cos(startAngle);
+                  const y1 = Math.sin(startAngle);
+                  const x2 = Math.cos(endAngle);
+                  const y2 = Math.sin(endAngle);
+                  const largeArc = ratio > 0.5 ? 1 : 0;
+                  
+                  const pathData = ratio === 1 ?
+                    `M 1 0 A 1 1 0 1 1 1 -0.01` :
+                    `M 0 0 L ${x1} ${y1} A 1 1 0 ${largeArc} 1 ${x2} ${y2} Z`;
+
+                  return <path key={cat} d={pathData} fill={catColors[cat] || catColors.Personal} />;
+                })}
+              </svg>
+            )}
+            <div style={{ display: "flex", gap: 8, marginTop: 12, flexWrap: "wrap", justifyContent: "center" }}>
+              {Object.keys(distribution).map(cat => (
+                <div key={cat} style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 10, color: theme.textSecondary, fontWeight: 600 }}>
+                  <div style={{ width: 8, height: 8, borderRadius: "50%", background: catColors[cat] || catColors.Personal }} /> {cat}
+                </div>
+              ))}
+            </div>
+          </NeoSurface>
+        </div>
 
         <div style={{ marginTop: 22 }}>
           <SectionLabel>Session history</SectionLabel>
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-            {history.map((h) => (
-              <NeoSurface key={h.id} style={{ padding: "12px 16px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                <div>
-                  <div style={{ color: theme.textPrimary, fontSize: 13.5, fontWeight: 600, ...fontBody }}>{h.name}</div>
-                  <div style={{ color: theme.textSecondary, fontSize: 11.5, ...fontBody }}>{h.date}</div>
-                </div>
-                <div style={{ color: theme.accent, fontWeight: 700, fontSize: 13, ...fontDisplay }}>{h.minutes}m</div>
-              </NeoSurface>
-            ))}
+            {history.slice(0, 15).map((h) => {
+              const displayDate = h.date && h.date.includes("T") ? new Date(h.date).toLocaleDateString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : h.date;
+              return (
+                <NeoSurface key={h.id} style={{ padding: "16px", display: "flex", flexDirection: "column", gap: 8 }}>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      <div style={{ width: 8, height: 8, borderRadius: "50%", background: catColors[h.category] || catColors.Personal }} />
+                      <div style={{ color: theme.textPrimary, fontSize: 14, fontWeight: 700, ...fontBody }}>{h.name}</div>
+                    </div>
+                    <div style={{ color: theme.accent, fontWeight: 800, fontSize: 14, ...fontDisplay }}>{h.minutes}m</div>
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                    {h.note ? (
+                      <div style={{ color: theme.textSecondary, fontSize: 12, fontStyle: "italic", ...fontBody }}>"{h.note}"</div>
+                    ) : (
+                      <div style={{ color: theme.textSecondary, fontSize: 11, ...fontBody }}>{displayDate}</div>
+                    )}
+                    {h.note && <div style={{ color: theme.textSecondary, fontSize: 11, ...fontBody }}>{displayDate}</div>}
+                  </div>
+                </NeoSurface>
+              );
+            })}
           </div>
         </div>
 
@@ -1129,7 +1457,14 @@ export default function NeoApp() {
               />
               <div style={{ display: "flex", gap: 10, marginTop: 14 }}>
                 <button onClick={() => { stopAlarm(); setShowNoteModal(false); setSessionNote(""); }} style={{ flex: 1, border: "none", background: theme.bg, boxShadow: theme.shadowRaisedSm, borderRadius: 14, padding: "11px 0", color: theme.textSecondary, fontWeight: 600, fontSize: 13, ...fontBody }}>Skip</button>
-                <PrimaryButton label="Save note" icon={<Check size={15} />} onClick={() => { stopAlarm(); setShowNoteModal(false); setSessionNote(""); }} style={{ flex: 1 }} />
+                <PrimaryButton label="Save note" icon={<Check size={15} />} onClick={() => { 
+                  stopAlarm(); 
+                  setShowNoteModal(false); 
+                  if (sessionNote.trim()) {
+                    setHistory(h => h.map(item => item.id === currentSessionId ? { ...item, note: sessionNote.trim() } : item));
+                  }
+                  setSessionNote(""); 
+                }} style={{ flex: 1 }} />
               </div>
             </NeoSurface>
           </div>
@@ -1158,6 +1493,28 @@ export default function NeoApp() {
     );
   }
 
+  /* ---------------------------------- MEDITATION TAB ---------------------------------- */
+
+  const renderMeditationTab = () => {
+    return (
+      <div style={{ padding: "18px 18px 100px", display: "flex", flexDirection: "column", gap: 24, height: "100%", justifyContent: "center", alignItems: "center" }}>
+        <div style={{ textAlign: "center", marginBottom: 20 }}>
+          <div style={{ color: theme.textSecondary, fontSize: 12, fontWeight: 700, letterSpacing: 2, textTransform: "uppercase", marginBottom: 8, ...fontDisplay }}>Mindfulness</div>
+          <h2 style={{ color: theme.textPrimary, fontSize: 24, fontWeight: 700, margin: 0, ...fontDisplay }}>Take a deep breath.</h2>
+          <p style={{ color: theme.textSecondary, fontSize: 13, marginTop: 4, ...fontBody }}>Align your body and mind.</p>
+        </div>
+        
+        <NeoSurface style={{ padding: 24, borderRadius: 32, width: "100%", display: "flex", justifyContent: "center", alignItems: "center", minHeight: 320 }}>
+          <BreathingExercise theme={theme} darkMode={darkMode} />
+        </NeoSurface>
+        
+        <div style={{ padding: 20, textAlign: "center", fontStyle: "italic", color: theme.textSecondary, fontSize: 14, ...fontBody }}>
+          "Focus on the breath, and the mind will follow."
+        </div>
+      </div>
+    );
+  };
+
   /* ---------------------------------- EXPENSE TAB ---------------------------------- */
 
 
@@ -1177,6 +1534,9 @@ export default function NeoApp() {
     };
 
     const spentThisMonth = transactions.filter(t => t.type === 'expense').reduce((sum, t) => sum + t.amount, 0);
+    const incomeThisMonth = transactions.filter(t => t.type === 'income').reduce((sum, t) => sum + t.amount, 0);
+    const netSavings = incomeThisMonth - spentThisMonth;
+    const monthlyBurnRate = upcomingBills.reduce((sum, b) => sum + Number(b.amount), 0);
 
     const spentByCategory = {};
     transactions.forEach(t => {
@@ -1184,12 +1544,16 @@ export default function NeoApp() {
         spentByCategory[t.category] = (spentByCategory[t.category] || 0) + t.amount;
       }
     });
+    
+    const pieData = [];
+    if (incomeThisMonth > 0) pieData.push({ name: "Income", value: incomeThisMonth, fill: theme.success });
+    if (spentThisMonth > 0) pieData.push({ name: "Expense", value: spentThisMonth, fill: theme.danger });
 
     const BUDGETS = EXPENSE_CATEGORIES.map(cat => ({
       category: cat,
       budget: categoryBudgets[cat] || 0,
       color: theme.accent
-    }));
+    })).filter(b => b.budget > 0);
 
     const now = new Date();
     const targetDate = new Date(now.getFullYear(), now.getMonth() + monthOffset, 1);
@@ -1215,7 +1579,7 @@ export default function NeoApp() {
       setNewDesc(tx.name || tx.desc || "");
       setNewCat(tx.category || "Food");
       setNewMethod(tx.method || "Cash");
-      setNewDate(tx.date === "Today" ? "" : tx.date);
+      setNewDate(tx.date === "Today" || !tx.date ? getLocalToday() : tx.date);
       setShowForm(true);
     };
 
@@ -1224,44 +1588,102 @@ export default function NeoApp() {
       setEditingTxId(null);
       setNewAmount("");
       setNewDesc("");
-      setNewDate("");
+      setNewDate(getLocalToday());
+    };
+
+    const handleDescChange = (val) => {
+      setNewDesc(val);
+      const lower = val.toLowerCase();
+      for (const [cat, keywords] of Object.entries(EXPENSE_KEYWORD_MAP)) {
+        if (keywords.some(k => lower.includes(k))) {
+          setNewCat(cat);
+          break;
+        }
+      }
     };
 
     return (
       <div style={{ padding: "18px 18px 100px" }}>
         {showForm ? (
-          <NeoSurface style={{ padding: 20, width: "100%", maxWidth: 360, maxHeight: "90vh", overflowY: "auto", display: "flex", flexDirection: "column", gap: 14 }}>
+          <div style={{ display: "flex", justifyContent: "center", width: "100%" }}>
+            <NeoSurface style={{ padding: 16, width: "100%", maxWidth: 380, maxHeight: "95vh", overflowY: "auto", display: "flex", flexDirection: "column", gap: 10 }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <div style={{ fontSize: 18, fontWeight: 800, color: theme.textPrimary, ...fontDisplay }}>{editingTxId ? "Edit transaction" : "Add transaction"}</div>
               <button onClick={closeForm} style={{ border: "none", background: "none", color: theme.textSecondary }}><X size={20} /></button>
             </div>
             
             <div style={{ display: "flex", gap: 8, background: theme.bg, padding: 4, borderRadius: 16, boxShadow: theme.shadowInset }}>
-              <div onClick={() => setNewType("expense")} style={{ flex: 1, textAlign: "center", padding: "8px 0", borderRadius: 12, fontSize: 13, fontWeight: 600, color: newType === "expense" ? theme.danger : theme.textSecondary, background: newType === "expense" ? theme.bg : "transparent", boxShadow: newType === "expense" ? theme.shadowRaisedSm : "none", transition: "all .2s" }}>Expense</div>
-              <div onClick={() => setNewType("income")} style={{ flex: 1, textAlign: "center", padding: "8px 0", borderRadius: 12, fontSize: 13, fontWeight: 600, color: newType === "income" ? theme.success : theme.textSecondary, background: newType === "income" ? theme.bg : "transparent", boxShadow: newType === "income" ? theme.shadowRaisedSm : "none", transition: "all .2s" }}>Income</div>
+              <div onClick={() => setNewType("expense")} style={{ flex: 1, textAlign: "center", padding: "8px 0", borderRadius: 12, fontSize: 13, fontWeight: 600, color: newType === "expense" ? theme.danger : theme.textSecondary, background: newType === "expense" ? theme.bg : "transparent", boxShadow: newType === "expense" ? theme.shadowRaisedSm : "none", transition: "all .2s", cursor: "pointer" }}>Expense</div>
+              <div onClick={() => setNewType("income")} style={{ flex: 1, textAlign: "center", padding: "8px 0", borderRadius: 12, fontSize: 13, fontWeight: 600, color: newType === "income" ? theme.success : theme.textSecondary, background: newType === "income" ? theme.bg : "transparent", boxShadow: newType === "income" ? theme.shadowRaisedSm : "none", transition: "all .2s", cursor: "pointer" }}>Income</div>
             </div>
 
-            <NeoSurface pressed style={{ padding: 12, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, color: theme.accent, fontSize: 13, fontWeight: 600, marginTop: 4 }}>
-              <Camera size={16} /> Scan receipt with AI
-            </NeoSurface>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', margin: "4px 0" }}>
+              <span style={{ fontSize: 36, fontWeight: 800, color: theme.textPrimary, ...fontDisplay }}>₹</span>
+              <input 
+                type="text" 
+                inputMode="decimal"
+                value={newAmount} 
+                onChange={e => {
+                  const val = e.target.value.replace(/[^0-9.]/g, '');
+                  if ((val.match(/\./g) || []).length <= 1) {
+                    setNewAmount(val);
+                  }
+                }}
+                placeholder="0"
+                style={{ 
+                  background: 'transparent', 
+                  border: 'none', 
+                  outline: 'none', 
+                  fontSize: 36, 
+                  fontWeight: 800, 
+                  color: theme.textPrimary, 
+                  width: `${Math.max(1.2, (newAmount || "").toString().length)}ch`,
+                  textAlign: "center",
+                  padding: 0,
+                  ...fontDisplay 
+                }} 
+              />
+            </div>
 
-            <NeoInput type="number" placeholder="Amount" value={newAmount} onChange={e => setNewAmount(e.target.value)} />
-            <NeoInput placeholder="Description" value={newDesc} onChange={e => setNewDesc(e.target.value)} />
-            <NeoInput type="date" value={newDate} onChange={e => setNewDate(e.target.value)} />
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              <NeoInput placeholder="Description (e.g., Starbucks, Uber)" value={newDesc} onChange={e => handleDescChange(e.target.value)} />
+              <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                <div style={{ width: 44, height: 44, borderRadius: 14, background: theme.bg, boxShadow: theme.shadowRaisedSm, display: "flex", alignItems: "center", justifyContent: "center", color: theme.accent, flexShrink: 0 }}>
+                  <Calendar size={18} />
+                </div>
+                <NeoDatePicker value={newDate} onChange={setNewDate} />
+              </div>
+            </div>
 
             <div style={{ fontSize: 11, fontWeight: 700, color: theme.textSecondary, marginTop: 4 }}>CATEGORY</div>
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-              {(newType === "expense" ? EXPENSE_CATEGORIES : INCOME_CATEGORIES).map(c => (
-                <Chip key={c} label={c} active={newCat === c} onClick={() => setNewCat(c)} />
-              ))}
-            </div>
-
-            <div style={{ fontSize: 11, fontWeight: 700, color: theme.textSecondary, marginTop: 4 }}>PAYMENT METHOD</div>
-            <div style={{ display: "flex", gap: 8 }}>
-              {["Cash", "Card", "UPI"].map(m => (
-                <Chip key={m} label={m} active={newMethod === m} onClick={() => setNewMethod(m)} />
-              ))}
-            </div>
+            <button 
+              onClick={() => setShowCategoryDrawer(true)}
+              style={{
+                width: "100%",
+                boxSizing: "border-box",
+                background: theme.bg,
+                boxShadow: theme.shadowRaisedSm,
+                border: "none",
+                borderRadius: 14,
+                padding: "10px 14px",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                color: theme.textPrimary,
+                fontSize: 15,
+                fontWeight: 600,
+                cursor: "pointer",
+                ...fontBody
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                <div style={{ width: 32, height: 32, borderRadius: 10, background: theme.accent + "1A", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16 }}>
+                  {CATEGORY_EMOJIS[newCat] || "📦"}
+                </div>
+                {newCat}
+              </div>
+              <ChevronDown size={18} color={theme.textSecondary} />
+            </button>
 
             <PrimaryButton label={editingTxId ? "Save Changes" : "Add transaction"} icon={<Check size={18} />} onClick={() => {
               if (newAmount) {
@@ -1282,19 +1704,48 @@ export default function NeoApp() {
                 }
                 closeForm();
               }
-            }} style={{ marginTop: 8 }} />
-          </NeoSurface>
+            }} style={{ marginTop: 4, padding: "12px" }} />
+            </NeoSurface>
+          </div>
         ) : (
           <>
             <div style={{ marginBottom: 24, marginTop: 8 }}>
-              <div style={{ fontSize: 26, fontWeight: 700, color: theme.textPrimary, ...fontDisplay }}>Expense tracker</div>
-              <div style={{ fontSize: 14, color: theme.textSecondary, marginTop: 4, ...fontBody }}>Track your spending</div>
             </div>
+
+            <NeoSurface style={{ padding: 20, marginBottom: 24, display: 'flex', flexDirection: 'column', gap: 20, position: 'relative', overflow: 'hidden' }}>
+               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                 <div>
+                    <div style={{ fontSize: 13, color: theme.textSecondary, fontWeight: 600 }}>{netSavings > 0 ? "Savings this month" : "Net Cashflow"}</div>
+                    <div style={{ fontSize: 28, fontWeight: 800, color: netSavings > 0 ? theme.success : netSavings < 0 ? theme.danger : theme.textPrimary, ...fontDisplay }}>
+                       {netSavings > 0 ? "+" : netSavings < 0 ? "-" : ""}₹{Math.abs(netSavings).toLocaleString()}
+                    </div>
+                 </div>
+                 <div style={{ textAlign: 'right' }}>
+                    <div style={{ fontSize: 12, color: theme.textSecondary }}>Income: <span style={{color: theme.success, fontWeight: 600}}>₹{incomeThisMonth.toLocaleString()}</span></div>
+                    <div style={{ fontSize: 12, color: theme.textSecondary, marginTop: 4 }}>Spent: <span style={{color: theme.danger, fontWeight: 600}}>₹{spentThisMonth.toLocaleString()}</span></div>
+                 </div>
+               </div>
+               
+               {pieData.length > 0 && (
+                 <div style={{ display: 'flex', justifyContent: 'center', marginTop: 10 }}>
+                   <PieChart width={200} height={200}>
+                     <Pie data={pieData} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={60} outerRadius={80} stroke="none" paddingAngle={5}>
+                       {pieData.map((entry, index) => {
+                         return <Cell key={`cell-${index}`} fill={entry.fill} />
+                       })}
+                     </Pie>
+                   </PieChart>
+                 </div>
+               )}
+               {pieData.length === 0 && (
+                 <div style={{ textAlign: 'center', color: theme.textSecondary, fontSize: 13, padding: '20px 0' }}>No transactions this month.</div>
+               )}
+            </NeoSurface>
 
             <div onTouchStart={(e) => e.stopPropagation()} onMouseDown={(e) => e.stopPropagation()} style={{ display: "flex", gap: 16, overflowX: "auto", paddingBottom: 16, scrollbarWidth: "none", msOverflowStyle: "none" }}>
               {[
-                { id: "bank", label: "Bank", icon: Square, balance: balances.bank },
-                { id: "cash", label: "Cash", icon: Square, balance: balances.cash },
+                { id: "bank", label: "Bank", icon: Landmark, balance: balances.bank },
+                { id: "cash", label: "Cash", icon: Wallet2, balance: balances.cash },
               ].map(acc => (
                 <NeoSurface key={acc.id} onClick={() => setActiveAccount(acc.id)} pressed={activeAccount === acc.id} style={{ minWidth: 145, flex: 1, padding: "20px", cursor: "pointer", borderRadius: 20, position: "relative" }}>
                   <button onClick={(e) => {
@@ -1335,7 +1786,7 @@ export default function NeoApp() {
                   ₹{spentThisMonth.toLocaleString()}
                 </div>
               </div>
-              <PrimaryButton icon={<Square size={16} strokeWidth={2.5} />} label="New" onClick={() => setShowForm(true)} style={{ padding: "12px 24px", borderRadius: 16, fontSize: 15 }} />
+              <PrimaryButton icon={<Plus size={16} strokeWidth={2.5} />} label="New" onClick={() => setShowForm(true)} style={{ padding: "12px 24px", borderRadius: 16, fontSize: 15 }} />
             </div>
 
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
@@ -1343,41 +1794,48 @@ export default function NeoApp() {
               <button onClick={() => setShowBudgetModal(true)} style={{ border: "none", background: "none", color: theme.accent, fontSize: 13, cursor: "pointer", fontWeight: 600, ...fontBody }}>Edit</button>
             </div>
             <div style={{ padding: "24px 20px", display: "flex", flexDirection: "column", gap: 24, background: theme.bg, borderRadius: 24, boxShadow: theme.shadowPressed, marginBottom: 32 }}>
-              {BUDGETS.map((b) => {
-                const spent = spentByCategory[b.category] || 0;
-                const pct = b.budget > 0 ? Math.min(100, (spent / b.budget) * 100) : 0;
-                const over = b.budget > 0 && spent > b.budget;
-                return (
-                  <div key={b.category}>
-                    <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 10 }}>
-                      <span style={{ color: theme.textPrimary, fontSize: 15, fontWeight: 500, ...fontBody }}>{b.category}</span>
-                      <span style={{ color: over ? theme.danger : theme.textSecondary, fontSize: 15, fontWeight: 500, ...fontBody }}>
-                        ₹{spent.toLocaleString()}
-                      </span>
+              {BUDGETS.length === 0 ? (
+                <div style={{ textAlign: "center", color: theme.textSecondary, fontSize: 13, ...fontBody }}>
+                  No budgets set yet.
+                  <br />
+                  <button onClick={() => setShowBudgetModal(true)} style={{ marginTop: 12, padding: "8px 16px", background: theme.accent, color: "#fff", border: "none", borderRadius: 8, fontWeight: 600, cursor: "pointer", ...fontBody }}>Set a budget</button>
+                </div>
+              ) : (
+                BUDGETS.map((b) => {
+                  const spent = spentByCategory[b.category] || 0;
+                  const pct = b.budget > 0 ? Math.min(100, (spent / b.budget) * 100) : 0;
+                  const over = b.budget > 0 && spent > b.budget;
+                  return (
+                    <div key={b.category}>
+                      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 10 }}>
+                        <span style={{ color: theme.textPrimary, fontSize: 15, fontWeight: 500, ...fontBody }}>{b.category}</span>
+                        <span style={{ color: over ? theme.danger : theme.textSecondary, fontSize: 15, fontWeight: 500, ...fontBody }}>
+                          ₹{spent.toLocaleString()} / ₹{b.budget.toLocaleString()}
+                        </span>
+                      </div>
+                      <div style={{ height: 8, borderRadius: 4, background: theme.bg, boxShadow: theme.shadowPressed, overflow: "hidden" }}>
+                        <div style={{ height: "100%", width: `${pct}%`, borderRadius: 4, background: over ? theme.danger : b.color, transition: "width .3s" }} />
+                      </div>
                     </div>
-                    <div style={{ height: 8, borderRadius: 4, background: theme.bg, boxShadow: theme.shadowPressed, overflow: "hidden" }}>
-                      <div style={{ height: "100%", width: `${pct}%`, borderRadius: 4, background: over ? theme.danger : b.color, transition: "width .3s" }} />
-                    </div>
-                  </div>
-                );
-              })}
+                  );
+                })
+              )}
             </div>
 
             <SectionLabel>Recent transactions</SectionLabel>
             <div style={{ display: "flex", flexDirection: "column", gap: 12, marginBottom: 24 }}>
               {transactions.slice(0, 4).map((t) => {
                 const isExp = t.type === "expense";
-                const Icon = DollarSign;
                 return (
                   <NeoSurface key={t.id} style={{ padding: 16, display: "flex", alignItems: "center", gap: 14 }}>
-                    <div style={{ width: 40, height: 40, borderRadius: 12, background: isExp ? `${theme.danger}15` : `${theme.success}15`, color: isExp ? theme.danger : theme.success, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                      <Icon size={20} />
+                    <div style={{ width: 40, height: 40, borderRadius: 12, background: isExp ? `${theme.danger}15` : `${theme.success}15`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18 }}>
+                      {CATEGORY_EMOJIS[t.category] || "📦"}
                     </div>
                     <div style={{ flex: 1 }}>
-                      <div style={{ color: theme.textPrimary, fontSize: 14, fontWeight: 700, marginBottom: 2, ...fontBody }}>{t.desc}</div>
-                      <div style={{ color: theme.textSecondary, fontSize: 11, ...fontBody }}>{t.category} • {t.date}</div>
+                      <div style={{ color: theme.textPrimary, fontSize: 14, fontWeight: 700, marginBottom: 2, ...fontBody }}>{t.category}</div>
+                      <div style={{ color: theme.textSecondary, fontSize: 11, ...fontBody }}>{t.desc} • {t.date}</div>
                     </div>
-                    <div style={{ color: isExp ? theme.textPrimary : theme.success, fontSize: 15, fontWeight: 800, ...fontBody }}>
+                    <div style={{ color: isExp ? theme.danger : theme.success, fontSize: 15, fontWeight: 800, ...fontBody }}>
                       {isExp ? "-" : "+"}₹{t.amount}
                     </div>
                   </NeoSurface>
@@ -1385,24 +1843,46 @@ export default function NeoApp() {
               })}
             </div>
 
-        <div style={{ marginTop: 20 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <SectionLabel>Upcoming bills</SectionLabel>
+        <div style={{ marginTop: 24 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+            <div>
+              <SectionLabel style={{ margin: 0 }}>Fixed Costs Hub</SectionLabel>
+              <div style={{ fontSize: 12, color: theme.textSecondary, marginTop: 2, fontWeight: 500 }}>Monthly Burn Rate: <span style={{ color: theme.danger, fontWeight: 700 }}>₹{monthlyBurnRate.toLocaleString()}</span></div>
+            </div>
             <button onClick={() => {
               setEditingBill(null);
               setBillFormState({ name: "", amount: "", daysLeft: "" });
               setShowBillModal(true);
-            }} style={{ border: "none", background: "none", color: theme.accent, fontSize: 13, fontWeight: 600, cursor: "pointer", ...fontBody }}>+ Add</button>
+            }} style={{ border: "none", background: theme.bg, boxShadow: theme.shadowRaisedSm, padding: "6px 12px", borderRadius: 12, color: theme.textPrimary, fontSize: 13, fontWeight: 700, cursor: "pointer", ...fontBody }}>+ Add</button>
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-            {upcomingBills.map((b) => (
+            {upcomingBills.map((b) => {
+              const now = new Date();
+              const currentDay = now.getDate();
+              const daysInCurrentMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+              
+              let targetDay = Math.min(b.daysLeft, daysInCurrentMonth);
+              let daysUntilDue = targetDay - currentDay;
+
+              if (daysUntilDue < 0) {
+                const daysInNextMonth = new Date(now.getFullYear(), now.getMonth() + 2, 0).getDate();
+                const nextTargetDay = Math.min(b.daysLeft, daysInNextMonth);
+                daysUntilDue = (daysInCurrentMonth - currentDay) + nextTargetDay;
+              }
+              const getOrdinal = (n) => {
+                const s = ["th", "st", "nd", "rd"];
+                const v = n % 100;
+                return n + (s[(v - 20) % 10] || s[v] || s[0]);
+              };
+
+              return (
               <NeoSurface key={b.id} style={{ padding: "12px 14px", display: "flex", alignItems: "center", gap: 10 }}>
-                <div style={{ width: 36, height: 36, borderRadius: 12, flexShrink: 0, background: theme.bg, boxShadow: theme.shadowRaisedSm, display: "flex", alignItems: "center", justifyContent: "center", color: b.daysLeft <= 3 ? theme.danger : theme.accent }}>
+                <div style={{ width: 36, height: 36, borderRadius: 12, flexShrink: 0, background: theme.bg, boxShadow: theme.shadowRaisedSm, display: "flex", alignItems: "center", justifyContent: "center", color: daysUntilDue <= 3 ? theme.danger : theme.accent }}>
                   <Bell size={16} />
                 </div>
                 <div style={{ flex: 1 }}>
                   <div style={{ color: theme.textPrimary, fontWeight: 600, fontSize: 13.5, ...fontBody }}>{b.name}</div>
-                  <div style={{ color: theme.textSecondary, fontSize: 11, ...fontBody }}>Due in {b.daysLeft} day{b.daysLeft !== 1 ? "s" : ""}</div>
+                  <div style={{ color: theme.textSecondary, fontSize: 11, ...fontBody }}>Due on the {getOrdinal(b.daysLeft)} • {daysUntilDue} day{daysUntilDue !== 1 ? "s" : ""} left</div>
                 </div>
                 <div style={{ color: theme.textPrimary, fontWeight: 700, fontSize: 13.5, marginRight: 8, ...fontDisplay }}>₹{b.amount.toLocaleString()}</div>
                 <button onClick={() => {
@@ -1412,7 +1892,7 @@ export default function NeoApp() {
                 }} style={{ border: "none", background: "none", color: theme.textSecondary, cursor: "pointer" }}><Pencil size={14} /></button>
                 <button onClick={() => setUpcomingBills(bills => bills.filter(x => x.id !== b.id))} style={{ border: "none", background: "none", color: theme.danger, cursor: "pointer" }}><Trash2 size={14} /></button>
               </NeoSurface>
-            ))}
+            );})}
           </div>
         </div>
 
@@ -1431,16 +1911,27 @@ export default function NeoApp() {
               {Array.from({ length: 3 }).map((_, i) => <div key={"pad" + i} />)}
               {Array.from({ length: daysInMonth }).map((_, i) => {
                 const day = i + 1;
-                const has = txByDay[day];
+                const has = txByDay[day] || [];
                 const isSelected = selectedDate === day;
+                
+                const dailyExpense = has.filter(t => t.type === 'expense').reduce((sum, t) => sum + t.amount, 0);
+                const isPastOrPresent = monthOffset < 0 || (monthOffset === 0 && day <= now.getDate());
+                
+                let textColor = theme.textPrimary;
+                if (isPastOrPresent) {
+                  if (dailyExpense === 0) textColor = theme.success;
+                  else if (dailyExpense > 0) textColor = theme.danger;
+                }
+
                 return (
                   <button key={day} onClick={() => setSelectedDate(isSelected ? null : day)} style={{
                     aspectRatio: "1", borderRadius: 10, border: "none", background: theme.bg,
                     boxShadow: isSelected ? theme.shadowPressed : theme.shadowRaisedSm,
-                    color: isSelected ? theme.accent : theme.textPrimary, fontSize: 15, fontWeight: 600, position: "relative", ...fontBody,
+                    color: isSelected ? theme.accent : textColor, fontSize: 15, fontWeight: 700, position: "relative", ...fontBody,
+                    opacity: isPastOrPresent ? 1 : 0.5
                   }}>
                     {day}
-                    {has && <div style={{ position: "absolute", bottom: 3, left: "50%", transform: "translateX(-50%)", width: 4, height: 4, borderRadius: "50%", background: has.some(t=>t.type==='expense') ? theme.danger : theme.accent2 }} />}
+                    {dailyExpense > 0 && <div style={{ position: "absolute", bottom: 4, left: "50%", transform: "translateX(-50%)", width: 4, height: 4, borderRadius: "50%", background: theme.danger }} />}
                   </button>
                 );
               })}
@@ -1452,30 +1943,29 @@ export default function NeoApp() {
           <SectionLabel>{selectedDate ? `Transactions on ${selectedDate} ${monthLabel}` : "All transactions"}</SectionLabel>
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
             {dayFiltered.map((t) => {
-              const CatIcon = CATEGORY_ICONS[t.category] || Circle;
               return (
                 <NeoSurface key={t.id} style={{ padding: "12px 14px", display: "flex", alignItems: "center", gap: 10 }}>
                   <div style={{
                     width: 36, height: 36, borderRadius: 12, flexShrink: 0, background: theme.bg,
                     boxShadow: theme.shadowRaisedSm, display: "flex", alignItems: "center", justifyContent: "center",
-                    color: t.type === "income" ? theme.accent2 : theme.accent,
+                    fontSize: 16
                   }}>
-                    <CatIcon size={16} />
+                    {CATEGORY_EMOJIS[t.category] || "📦"}
                   </div>
                   <div style={{ display: "flex", flexDirection: "column", gap: 3, flex: 1 }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                      <span style={{ color: theme.textPrimary, fontWeight: 600, fontSize: 13.5, ...fontBody }}>{t.name}</span>
+                      <span style={{ color: theme.textPrimary, fontWeight: 600, fontSize: 13.5, ...fontBody }}>{t.category}</span>
                       {t.recurring && <Repeat size={12} color={theme.textSecondary} />}
                       {t.split && <Split size={12} color={theme.accent} />}
                     </div>
                     <div style={{ display: "flex", alignItems: "center", gap: 8, color: theme.textSecondary, fontSize: 11, ...fontBody }}>
-                      <span>{t.category}</span>
+                      <span>{t.name}</span>
                       <span style={{ display: "flex", alignItems: "center", gap: 3 }}>{methodIcon(t.method)} {methodLabel(t.method)}</span>
                       {t.split && <span style={{ color: theme.accent }}>· split with {t.splitWith}</span>}
                     </div>
                   </div>
                   <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                    <div style={{ color: t.type === "income" ? theme.accent2 : theme.danger, fontWeight: 700, fontSize: 13.5, ...fontDisplay }}>
+                    <div style={{ color: t.type === "income" ? theme.success : theme.danger, fontWeight: 700, fontSize: 13.5, ...fontDisplay }}>
                       {t.type === "income" ? "+" : "-"}₹{t.amount.toLocaleString()}
                     </div>
                     <button onClick={() => openEdit(t)} style={{ border: "none", background: "none", color: theme.textSecondary }}><Pencil size={14} /></button>
@@ -1492,12 +1982,62 @@ export default function NeoApp() {
             <NeoSurface style={{ padding: 20, width: "100%", maxWidth: 320 }}>
               <div style={{ color: theme.textPrimary, fontSize: 16, fontWeight: 700, marginBottom: 16, ...fontDisplay }}>Set Budgets</div>
               <div style={{ maxHeight: '60vh', overflowY: 'auto', paddingRight: 8 }}>
-                {EXPENSE_CATEGORIES.map(cat => (
-                  <div key={cat} style={{ marginBottom: 12 }}>
-                    <div style={{ color: theme.textSecondary, fontSize: 12, marginBottom: 4, ...fontBody }}>{cat}</div>
-                    <NeoInput type="number" placeholder="No limit" value={categoryBudgets[cat] || ""} onChange={(e) => setCategoryBudgets(prev => ({...prev, [cat]: Number(e.target.value) || 0}))} />
+                {Object.keys(categoryBudgets).filter(c => categoryBudgets[c] > 0).map(cat => (
+                  <div key={cat} style={{ marginBottom: 12, display: "flex", alignItems: "center", gap: 8 }}>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ color: theme.textSecondary, fontSize: 12, marginBottom: 4, ...fontBody }}>{cat}</div>
+                      <NeoInput type="number" placeholder="Amount" value={categoryBudgets[cat] || ""} onChange={(e) => setCategoryBudgets(prev => ({...prev, [cat]: Number(e.target.value) || 0}))} />
+                    </div>
+                    <button onClick={() => setCategoryBudgets(prev => ({...prev, [cat]: 0}))} style={{ background: "none", border: "none", color: theme.danger, cursor: "pointer", padding: 8 }}><Trash2 size={16} /></button>
                   </div>
                 ))}
+                
+                {EXPENSE_CATEGORIES.filter(c => !(categoryBudgets[c] > 0)).length > 0 && (
+                  <div style={{ marginTop: 16, position: "relative" }}>
+                    <div style={{ color: theme.textSecondary, fontSize: 12, marginBottom: 4, ...fontBody }}>Add Category Budget</div>
+                    <button 
+                      onClick={() => setShowBudgetDropdown(!showBudgetDropdown)}
+                      style={{
+                        width: "100%", padding: "12px 14px", borderRadius: 14,
+                        border: "none", background: theme.bg, color: theme.textPrimary,
+                        boxShadow: theme.shadowInset, fontSize: 14, outline: "none",
+                        display: "flex", justifyContent: "space-between", alignItems: "center",
+                        cursor: "pointer",
+                        ...fontBody
+                      }}
+                    >
+                      <span>Select category...</span>
+                      <ChevronDown size={16} color={theme.textSecondary} />
+                    </button>
+                    {showBudgetDropdown && (
+                      <div style={{
+                        position: "absolute", top: "100%", left: 0, right: 0, marginTop: 8,
+                        background: theme.bg, borderRadius: 14, boxShadow: theme.shadowRaised,
+                        zIndex: 60, maxHeight: 200, overflowY: "auto", padding: 8
+                      }}>
+                        {EXPENSE_CATEGORIES.filter(c => !(categoryBudgets[c] > 0)).map(cat => (
+                          <button
+                            key={cat}
+                            onClick={() => {
+                              setCategoryBudgets(prev => ({...prev, [cat]: 1000}));
+                              setShowBudgetDropdown(false);
+                            }}
+                            style={{
+                              width: "100%", padding: "10px", background: "transparent", border: "none",
+                              textAlign: "left", color: theme.textPrimary, fontSize: 14, display: "flex", alignItems: "center", gap: 10,
+                              borderRadius: 8, cursor: "pointer", ...fontBody
+                            }}
+                          >
+                            <div style={{ width: 28, height: 28, borderRadius: 8, background: theme.accent + "1A", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14 }}>
+                              {CATEGORY_EMOJIS[cat] || "📦"}
+                            </div>
+                            {cat}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
               <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 16 }}>
                 <button onClick={() => setShowBudgetModal(false)} style={{ background: theme.accent, color: "#fff", border: "none", borderRadius: 8, padding: "8px 16px", cursor: "pointer", ...fontBody }}>Done</button>
@@ -1640,8 +2180,8 @@ export default function NeoApp() {
               </div>
 
               <div style={{ marginBottom: 16 }}>
-                <div style={{ color: theme.textSecondary, fontSize: 12, marginBottom: 4, ...fontBody }}>Days Left</div>
-                <NeoInput type="number" placeholder="e.g. 5" value={billFormState.daysLeft} onChange={(e) => setBillFormState({ ...billFormState, daysLeft: e.target.value })} />
+                <div style={{ color: theme.textSecondary, fontSize: 12, marginBottom: 4, ...fontBody }}>Recurring Date (1-31)</div>
+                <NeoInput type="number" placeholder="e.g. 15" min="1" max="31" value={billFormState.daysLeft} onChange={(e) => setBillFormState({ ...billFormState, daysLeft: e.target.value })} />
               </div>
 
               <div style={{ display: "flex", gap: 10, marginTop: 12 }}>
@@ -1660,6 +2200,64 @@ export default function NeoApp() {
             </NeoSurface>
           </div>
         )}
+
+      {/* Category Bottom Drawer */}
+      {showCategoryDrawer && (
+        <div style={{ position: "fixed", inset: 0, zIndex: 10000, display: "flex", flexDirection: "column", justifyContent: "flex-end" }}>
+          <div 
+            style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.2)", backdropFilter: "blur(4px)" }} 
+            onClick={() => setShowCategoryDrawer(false)} 
+          />
+          <div style={{ 
+            position: "relative", 
+            background: theme.bg, 
+            borderTopLeftRadius: 28, 
+            borderTopRightRadius: 28, 
+            padding: "24px 20px 40px",
+            boxShadow: "0 -10px 40px rgba(0,0,0,0.1)",
+            animation: "slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1)"
+          }}>
+            <div style={{ width: 40, height: 4, borderRadius: 2, background: theme.textSecondary, opacity: 0.3, margin: "0 auto 20px" }} />
+            <h3 style={{ margin: "0 0 20px", fontSize: 18, color: theme.textPrimary, ...fontDisplay }}>Select Category</h3>
+            
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 16 }}>
+              {(newType === "expense" ? EXPENSE_CATEGORIES : INCOME_CATEGORIES).map(c => (
+                <div 
+                  key={c}
+                  onClick={() => { setNewCat(c); setShowCategoryDrawer(false); }}
+                  style={{ 
+                    display: "flex", 
+                    flexDirection: "column", 
+                    alignItems: "center", 
+                    gap: 8,
+                    cursor: "pointer",
+                    opacity: newCat === c ? 1 : 0.6,
+                    transform: newCat === c ? "scale(1.05)" : "scale(1)",
+                    transition: "all 0.2s"
+                  }}
+                >
+                  <div style={{ 
+                    width: 56, 
+                    height: 56, 
+                    borderRadius: 18, 
+                    background: newCat === c ? theme.accent : theme.pageBg,
+                    boxShadow: newCat === c ? `0 8px 16px ${theme.accent}40` : theme.shadowRaisedSm,
+                    display: "flex", 
+                    alignItems: "center", 
+                    justifyContent: "center",
+                    fontSize: 24
+                  }}>
+                    {CATEGORY_EMOJIS[c] || "📦"}
+                  </div>
+                  <span style={{ fontSize: 11, fontWeight: 600, color: newCat === c ? theme.accent : theme.textSecondary, textAlign: "center", ...fontBody }}>
+                    {c}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
       </div>
     );
   }
@@ -1668,194 +2266,6 @@ export default function NeoApp() {
 
   /* ---------------------------------- PLANNER TAB ---------------------------------- */
 
-
-  const renderTodoTab = () => {
-
-    const PRIORITY_COLOR = { High: theme.danger, Medium: "#ffb648", Low: theme.accent2 };
-
-    const addTodo = async () => {
-      if (!todoInput.trim()) return;
-      
-      let finalDate = new Date().toISOString().split('T')[0];
-      let finalText = todoInput.trim();
-      let isAiLoading = false;
-      
-      setTodos((t) => [{ id: Date.now(), text: finalText, done: false, priority: newPriority, date: finalDate, due: null, reminder: false, recurring: newRecurringDays.length ? newRecurringDays : null, subtasks: [] }, ...t]);
-      setTodoInput(""); setNewPriority("Medium"); setNewRecurringDays([]); setShowTaskOptions(false);
-    };
-
-    const toggleDone = (id) => setTodos((t) => t.map((x) => (x.id === id ? { ...x, done: !x.done } : x)));
-    const scratch = (id) => setTodos((t) => t.filter((x) => x.id !== id));
-    const toggleSubtask = (todoId, subId) => setTodos((t) => t.map((x) => x.id === todoId ? { ...x, subtasks: x.subtasks.map((s) => s.id === subId ? { ...s, done: !s.done } : s) } : x));
-    const toggleReminder = (id) => setTodos((t) => t.map((x) => x.id === id ? { ...x, reminder: !x.reminder } : x));
-
-    const todayStr = new Date().toISOString().split('T')[0];
-    const activeTodos = todos.filter(t => t.date === todayStr);
-    
-    const groups = { Work: [], Study: [], Personal: [] };
-    activeTodos.forEach((t) => groups[autoCategorizeTodo(t.text)].push(t));
-    const groupMeta = {
-      Work: { icon: <Briefcase size={15} />, color: theme.accent, FallbackIcon: Briefcase },
-      Study: { icon: <BookOpen size={15} />, color: theme.accent2, FallbackIcon: BookOpen },
-      Personal: { icon: <User size={15} />, color: theme.danger, FallbackIcon: User },
-    };
-
-    return (
-      <div style={{ padding: "18px 18px 24px", display: "flex", flexDirection: "column", flex: 1 }}>
-
-
-        {Object.keys(groups).map((g) => (
-          <div key={g} style={{ marginTop: 22 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
-              <span style={{ color: groupMeta[g].color }}>{groupMeta[g].icon}</span>
-              <span style={{ color: theme.textPrimary, fontWeight: 700, fontSize: 13.5, ...fontDisplay }}>{g}</span>
-              <span style={{ color: theme.textSecondary, fontSize: 11.5, ...fontBody }}>({groups[g].length})</span>
-            </div>
-            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-              {groups[g].length === 0 && (
-                <div style={{ color: theme.textSecondary, fontSize: 12, ...fontBody, paddingLeft: 4 }}>Nothing here yet.</div>
-              )}
-              {groups[g].map((t) => {
-                const TaskIcon = getTaskIcon(t.text) || groupMeta[g].FallbackIcon;
-                const isExpanded = expandedId === t.id;
-                const hasSubtasks = t.subtasks && t.subtasks.length > 0;
-                const doneSubs = hasSubtasks ? t.subtasks.filter((s) => s.done).length : 0;
-                return (
-                  <NeoSurface key={t.id} style={{ padding: "12px 14px" }}
-                    
-                  >
-                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                      <div style={{
-                        width: 32, height: 32, borderRadius: 12, flexShrink: 0, background: theme.bg,
-                        boxShadow: theme.shadowRaisedSm, display: "flex", alignItems: "center", justifyContent: "center",
-                        color: t.done ? theme.textSecondary : groupMeta[g].color, opacity: t.done ? 0.5 : 1,
-                      }}>
-                        <TaskIcon size={16} />
-                      </div>
-                      <button onClick={() => toggleDone(t.id)} style={{
-                        width: 24, height: 24, borderRadius: "50%", border: "none", flexShrink: 0,
-                        background: theme.bg, boxShadow: t.done ? theme.shadowPressed : theme.shadowRaisedSm,
-                        color: t.done ? theme.accent2 : "transparent", display: "flex", alignItems: "center", justifyContent: "center",
-                      }}>
-                        {t.done && <Check size={14} />}
-                      </button>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ display: "flex", alignItems: "flex-start", gap: 6 }}>
-                          <span style={{ color: t.done ? theme.textSecondary : theme.textPrimary, fontSize: 13.5, textDecoration: t.done ? "line-through" : "none", wordBreak: "break-word", lineHeight: 1.4, ...fontBody }}>{t.text}</span>
-                          <div style={{ marginTop: 2, flexShrink: 0 }}>
-                            <Flag size={11} color={PRIORITY_COLOR[t.priority]} fill={PRIORITY_COLOR[t.priority]} />
-                          </div>
-                        </div>
-                        <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 3, flexWrap: "wrap" }}>
-                          {t.due && (
-                            <span style={{ display: "flex", alignItems: "center", gap: 3, color: theme.textSecondary, fontSize: 10.5, ...fontBody }}>
-                              <AlarmClock size={11} /> {t.due}
-                            </span>
-                          )}
-                          {t.recurring && (
-                            <span style={{ display: "flex", alignItems: "center", gap: 3, color: theme.textSecondary, fontSize: 10.5, ...fontBody }}>
-                              <Repeat size={11} /> {t.recurring.join("/")}
-                            </span>
-                          )}
-                          {hasSubtasks && (
-                            <button onClick={() => setExpandedId(isExpanded ? null : t.id)} style={{ display: "flex", alignItems: "center", gap: 3, border: "none", background: "none", color: theme.accent, fontSize: 10.5, ...fontBody }}>
-                              <ChevronDown size={11} style={{ transform: isExpanded ? "rotate(180deg)" : "none" }} /> {doneSubs}/{t.subtasks.length} subtasks
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                      {t.due && (
-                        <button onClick={() => toggleReminder(t.id)} style={{ border: "none", background: "none", color: t.reminder ? theme.accent : theme.textSecondary, flexShrink: 0 }}><Bell size={14} /></button>
-                      )}
-                      <button onClick={() => scratch(t.id)} style={{ border: "none", background: "none", color: theme.textSecondary, flexShrink: 0 }}><X size={16} /></button>
-                    </div>
-                    {isExpanded && hasSubtasks && (
-                      <div style={{ marginTop: 10, marginLeft: 42, display: "flex", flexDirection: "column", gap: 6 }}>
-                        {t.subtasks.map((s) => (
-                          <div key={s.id} style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
-                            <button onClick={() => toggleSubtask(t.id, s.id)} style={{
-                              width: 18, height: 18, borderRadius: 6, border: "none", flexShrink: 0, marginTop: 2,
-                              background: theme.bg, boxShadow: s.done ? theme.shadowPressed : theme.shadowRaisedSm,
-                              color: s.done ? theme.accent2 : "transparent", display: "flex", alignItems: "center", justifyContent: "center",
-                            }}>{s.done && <Check size={11} />}</button>
-                            <span style={{ color: s.done ? theme.textSecondary : theme.textPrimary, fontSize: 12, textDecoration: s.done ? "line-through" : "none", wordBreak: "break-word", lineHeight: 1.4, ...fontBody }}>{s.text}</span>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </NeoSurface>
-                );
-              })}
-            </div>
-          </div>
-        ))}
-
-        <div style={{ position: "sticky", bottom: 0, zIndex: 10, marginTop: "auto" }}>
-          <div style={{ marginTop: 12 }}>
-            <SectionLabel>Add a task for today</SectionLabel>
-          </div>
-          <NeoSurface style={{ padding: 12, boxShadow: theme.shadowRaised }}>
-            <div style={{ display: "flex", gap: 8 }}>
-              <div style={{ flex: 1 }}>
-                <NeoInput placeholder="e.g. Prepare client presentation" value={todoInput} onChange={(e) => setTodoInput(e.target.value)} onKeyDown={(e) => e.key === "Enter" && addTodo()} />
-              </div>
-              <button onClick={() => setShowTaskOptions((v) => !v)} style={{
-                width: 46, borderRadius: 14, border: "none", background: theme.bg, boxShadow: showTaskOptions ? theme.shadowPressed : theme.shadowRaisedSm,
-                color: theme.textSecondary, display: "flex", alignItems: "center", justifyContent: "center",
-              }}><ChevronDown size={18} style={{ transform: showTaskOptions ? "rotate(180deg)" : "none" }} /></button>
-              <button onClick={addTodo} style={{
-                width: 46, borderRadius: 14, border: "none", background: `linear-gradient(135deg, ${theme.accent}, #5a4fcf)`,
-                color: "#fff", display: "flex", alignItems: "center", justifyContent: "center",
-              }}><Plus size={18} /></button>
-            </div>
-            {showTaskOptions && (
-              <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 12 }}>
-                <div>
-                  <div style={{ color: theme.textSecondary, fontSize: 11, marginBottom: 6, ...fontBody }}>Priority</div>
-                  <div style={{ display: "flex", gap: 8 }}>
-                    {["High", "Medium", "Low"].map((p) => (
-                      <Chip key={p} label={p} active={newPriority === p} colorActive={PRIORITY_COLOR[p]} onClick={() => setNewPriority(p)} />
-                    ))}
-                  </div>
-                </div>
-                <div style={{ display: "flex", flexWrap: "wrap", gap: 12, alignItems: "flex-end" }}>
-                  <div>
-                    <div style={{ color: theme.textSecondary, fontSize: 11, marginBottom: 6, ...fontBody }}>Repeat on</div>
-                    <div style={{ display: "flex", gap: 4 }}>
-                      {[{k:"Mon",l:"M"}, {k:"Tue",l:"T"}, {k:"Wed",l:"W"}, {k:"Thu",l:"T"}, {k:"Fri",l:"F"}, {k:"Sat",l:"S"}, {k:"Sun",l:"S"}].map((d) => (
-                        <button
-                          key={d.k}
-                          onClick={() => setNewRecurringDays((days) => days.includes(d.k) ? days.filter((x) => x !== d.k) : [...days, d.k])}
-                          style={{
-                            width: 32, height: 32, borderRadius: 16, border: "none", cursor: "pointer",
-                            display: "flex", alignItems: "center", justifyContent: "center",
-                            fontSize: 12, fontWeight: 600, ...fontBody,
-                            background: newRecurringDays.includes(d.k) ? theme.accent : theme.bg,
-                            color: newRecurringDays.includes(d.k) ? "#fff" : theme.textSecondary,
-                            boxShadow: newRecurringDays.includes(d.k) ? theme.shadowPressed : theme.shadowRaisedSm
-                          }}
-                        >
-                          {d.l}
-                        </button>
-                    ))}
-                  </div>
-                </div>
-                <div style={{ flex: 1, minWidth: 150 }}>
-                  <div style={{ color: theme.textSecondary, fontSize: 11, marginBottom: 6, ...fontBody }}>Due Date</div>
-                  <NeoInput type="datetime-local" style={{ fontSize: 12.5 }} />
-                </div>
-              </div>
-            </div>
-          )}
-        </NeoSurface>
-        </div>
-        <div style={{ color: theme.textSecondary, fontSize: 11, marginTop: 8, textAlign: "center", paddingBottom: 18, ...fontBody }}>
-          Tasks are auto-sorted into Work / Study / Personal based on what you type.
-        </div>
-
-      </div>
-    );
-  }
 
   /* ---------------------------------- INSIGHTS TAB ---------------------------------- */
 
@@ -2194,13 +2604,15 @@ Generate one short, helpful insight about my productivity or finances based ONLY
 
   const TABS = [
     { id: "timer", label: "Timer", icon: TimerIcon },
+    { id: "meditation", label: "Meditation", icon: Flower2 },
     { id: "expense", label: "Expense", icon: Wallet },
     { id: "todo", label: "Todo", icon: ListChecks },
     { id: "insights", label: "Insights", icon: BarChart3 },
   ];
-  const titles = { timer: "Focus Timer", expense: "Expense Tracker", todo: "Today's Tasks", insights: "Insights" };
+  const titles = { timer: "Focus Timer", meditation: "Mindfulness", expense: "Expense Tracker", todo: "Today's Tasks", insights: "Insights" };
   const subtitles = {
     timer: "Stay in the zone",
+    meditation: "Breathe, relax, and center yourself",
     expense: apiKey ? "Synced with AI insight engine" : "Track every rupee",
     todo: "Auto-sorted for you",
     insights: apiKey ? "Powered by your Gemini key" : "Add an API key for live AI insights",
@@ -2280,8 +2692,9 @@ Generate one short, helpful insight about my productivity or finances based ONLY
         >
           <div key={activeTab} style={{ animation: `${direction > 0 ? "slideInRight" : "slideInLeft"} 0.25s ease`, flex: "1 0 auto", display: "flex", flexDirection: "column" }}>
             {activeTab === "timer" && renderTimerTab()}
+            {activeTab === "meditation" && renderMeditationTab()}
             {activeTab === "expense" && renderExpenseTab()}
-            {activeTab === "todo" && renderTodoTab()}
+            {activeTab === "todo" && <TodoTab theme={theme} NeoSurface={NeoSurface} NeoInput={NeoInput} PrimaryButton={PrimaryButton} SectionLabel={SectionLabel} fontDisplay={fontDisplay} fontBody={fontBody} />}
             {activeTab === "insights" && renderInsightsTab()}
           </div>
         </div>

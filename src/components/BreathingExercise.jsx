@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Play, Pause, RotateCcw } from "lucide-react";
+import React, { useState, useEffect } from 'react';
+import { Play, Pause, RotateCcw, ArrowUpCircle, PauseCircle, ArrowDownCircle } from "lucide-react";
 
 const PHASES = [
   { label: 'Breathe in', duration: 4 },
@@ -13,32 +13,24 @@ export default function BreathingExercise({ theme, darkMode }) {
   const [isRunning, setIsRunning] = useState(false);
   const [round, setRound] = useState(1);
   const totalRounds = 4;
-  const intervalRef = useRef(null);
-
-  const tick = useCallback(() => {
-    setCount((prev) => {
-      if (prev > 1) return prev - 1;
-
-      setPhaseIndex((prevPhase) => {
-        const next = (prevPhase + 1) % PHASES.length;
-        if (next === 0) {
-          setRound((r) => (r < totalRounds ? r + 1 : r));
-        }
-        return next;
-      });
-      return null; 
-    });
-  }, []);
-
-  useEffect(() => {
-    setCount(PHASES[phaseIndex].duration);
-  }, [phaseIndex]);
-
   useEffect(() => {
     if (!isRunning) return;
-    intervalRef.current = setInterval(tick, 1000);
-    return () => clearInterval(intervalRef.current);
-  }, [isRunning, tick]);
+    
+    const timer = setTimeout(() => {
+      if (count > 1) {
+        setCount(count - 1);
+      } else {
+        const nextPhase = (phaseIndex + 1) % PHASES.length;
+        setPhaseIndex(nextPhase);
+        setCount(PHASES[nextPhase].duration);
+        if (nextPhase === 0) {
+          setRound((r) => (r < totalRounds ? r + 1 : r));
+        }
+      }
+    }, 1000);
+
+    return () => clearTimeout(timer);
+  }, [isRunning, count, phaseIndex, totalRounds]);
 
   const handleReset = () => {
     setIsRunning(false);
@@ -49,12 +41,15 @@ export default function BreathingExercise({ theme, darkMode }) {
 
   let scale = 1;
   if (phaseIndex === 0) {
-    const progress = (PHASES[0].duration - count + 1) / PHASES[0].duration; 
+    // Breathe In: Scale from 1.0 to 1.3
+    const progress = (PHASES[0].duration - count) / Math.max(1, PHASES[0].duration - 1);
     scale = 1 + progress * 0.3;
   } else if (phaseIndex === 1) {
+    // Hold: Stay at 1.3
     scale = 1.3;
   } else if (phaseIndex === 2) {
-    const progress = (count - 1) / PHASES[2].duration; 
+    // Breathe Out: Scale from 1.3 down to 1.0
+    const progress = (count - 1) / Math.max(1, PHASES[2].duration - 1);
     scale = 1 + progress * 0.3;
   }
 
@@ -69,19 +64,34 @@ export default function BreathingExercise({ theme, darkMode }) {
       marginBottom: 22,
       boxShadow: theme.shadowRaised,
     }}>
-      <p style={{
-        fontSize: 13,
-        fontWeight: 600,
-        color: theme.textSecondary,
-        marginBottom: 24,
-        letterSpacing: '0.05em',
-      }}>
-        {PHASES[phaseIndex].label.toUpperCase()}
-      </p>
+      <style>
+        {`
+          @keyframes holdPulse {
+            0% { box-shadow: 0 0 0 0 rgba(108, 92, 231, 0.4); }
+            70% { box-shadow: 0 0 0 15px rgba(108, 92, 231, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(108, 92, 231, 0); }
+          }
+        `}
+      </style>
+
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 24 }}>
+        {phaseIndex === 0 && <ArrowUpCircle size={18} color={theme.accent} />}
+        {phaseIndex === 1 && <PauseCircle size={18} color={theme.accent} />}
+        {phaseIndex === 2 && <ArrowDownCircle size={18} color={theme.accent} />}
+        <p style={{
+          fontSize: 14,
+          fontWeight: 700,
+          color: theme.textSecondary,
+          letterSpacing: '0.08em',
+          textTransform: 'uppercase'
+        }}>
+          {PHASES[phaseIndex].label}
+        </p>
+      </div>
 
       <div style={{
-        width: 160,
-        height: 160,
+        width: 170,
+        height: 170,
         borderRadius: '50%',
         background: theme.bg,
         boxShadow: theme.shadowRaisedSm,
@@ -100,14 +110,16 @@ export default function BreathingExercise({ theme, darkMode }) {
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            transition: 'transform 1s ease-in-out',
+            transition: 'transform 1s linear',
             transform: `scale(${scale})`,
+            animation: (phaseIndex === 1 && isRunning) ? 'holdPulse 2s infinite' : 'none'
           }}
         >
           <span style={{
             color: '#fff',
-            fontSize: 32,
-            fontWeight: 700,
+            fontSize: 36,
+            fontWeight: 800,
+            fontFamily: "Outfit, system-ui, sans-serif"
           }}>{count}</span>
         </div>
       </div>

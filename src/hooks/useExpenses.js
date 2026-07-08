@@ -5,29 +5,32 @@ import { VALID_EXPENSE_CATEGORIES } from '../constants/categories.js';
 import { getLocalDateString } from '../utils/date.js';
 
 const STORAGE_KEY = 'ledger_expenses';
+const BUDGET_KEY = 'ledger_budgets';
 
-function generateId() {
+export function generateId() {
   return `e_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
 }
 
-function createExpense(overrides = {}) {
+export function createExpense(overrides = {}) {
   return {
     id: generateId(),
     amount: 0,
     currency: 'INR',
     category: 'other',
+    subcategory: '',
     note: '',
     date: getLocalDateString(),
-    sorted: true,
-    linkedTaskId: null,
-    recurring: null,
+    tags: [],
+    recurring: false,
+    recurrenceInterval: 'none', // 'monthly' | 'weekly' | 'none'
+    receiptUrl: '',
     createdAt: new Date().toISOString(),
     ...overrides,
   };
 }
 
 // ─── Date helpers ─────────────────────────────────────────────────────────────
-function isSameDay(dateStr, selectedDate = new Date()) {
+export function isSameDay(dateStr, selectedDate = new Date()) {
   if (!dateStr) return false;
   const d = new Date(dateStr);
   const sel = new Date(selectedDate);
@@ -45,31 +48,73 @@ function getWeekStart(selectedDate = new Date()) {
   return d;
 }
 
-function daysBetween(d1, d2) {
-  return Math.floor(Math.abs(d2 - d1) / (1000 * 60 * 60 * 24));
-}
-
-// ─── Recurring due-date rolling ───────────────────────────────────────────────
-function advanceRecurring(recurring) {
-  const next = new Date(recurring.nextDueDate);
-  if (recurring.frequency === 'monthly') {
-    next.setMonth(next.getMonth() + 1);
-  } else if (recurring.frequency === 'weekly') {
-    next.setDate(next.getDate() + 7);
-  }
-  return { ...recurring, nextDueDate: getLocalDateString(next) };
-}
-
 // ─── Hook ─────────────────────────────────────────────────────────────────────
 export function useExpenses() {
   const [expenses, setExpenses] = useState([]);
+  const [budgets, setBudgets] = useState({});
   const [loading, setLoading] = useState(true);
   const [undoBuffer, setUndoBuffer] = useState(null);
   const undoTimerRef = useRef(null);
 
   useEffect(() => {
-    getItem(STORAGE_KEY).then((stored) => {
-      if (Array.isArray(stored)) setExpenses(stored);
+    Promise.all([
+      getItem(STORAGE_KEY),
+      getItem(BUDGET_KEY)
+    ]).then(([storedExpenses, storedBudgets]) => {
+      let expensesList = Array.isArray(storedExpenses) ? storedExpenses : [];
+      
+      // One-time Migration from neo_transactions
+      const migratedFlag = window.localStorage.getItem('neo_expenses_migrated');
+      if (!migratedFlag) {
+        try {
+          const legacy = JSON.parse(window.localStorage.getItem('neo_transactions') || '[]');
+          if (Array.isArray(legacy)) {
+            const legacyExpenses = legacy
+              .filter(t => t.type === 'expense')
+              .map(t => ({
+                id: String(t.id || generateId()),
+                amount: t.amount || 0,
+                category: t.category?.toLowerCase() || 'other',
+                subcategory: '',
+                note: t.desc || t.name || '',
+                date: t.date === 'Today' ? getLocalDateString() : (t.date || getLocalDateString()),
+                tags: [],
+                recurring: false,
+                recurrenceInterval: 'none',
+                receiptUrl: '',
+                createdAt: new Date().toISOString()
+              }));
+            
+            const existingIds = new Set(expensesList.map(e => e.id));
+            legacyExpenses.forEach(e => {
+              if (!existingIds.has(e.id)) {
+                expensesList.push(e);
+              }
+            });
+          }
+          
+          // Migrate old neo_categoryBudgets
+          const legacyBudgets = JSON.parse(window.localStorage.getItem('neo_categoryBudgets') || '{}');
+          let nextBudgets = { ...(storedBudgets || {}) };
+          for (const [cat, limit] of Object.entries(legacyBudgets)) {
+            const catId = cat.toLowerCase();
+            if (!nextBudgets[catId] && limit) {
+              nextBudgets[catId] = { monthlyLimit: limit, rolloverEnabled: false };
+            }
+          }
+
+          window.localStorage.setItem('neo_expenses_migrated', 'true');
+          setItem(STORAGE_KEY, expensesList);
+          setItem(BUDGET_KEY, nextBudgets);
+          
+          if (storedBudgets === null) storedBudgets = nextBudgets;
+        } catch (e) {
+          console.error('Migration failed', e);
+        }
+      }
+
+      setExpenses(expensesList);
+      if (storedBudgets) setBudgets(storedBudgets);
       setLoading(false);
     });
   }, []);
@@ -77,6 +122,11 @@ export function useExpenses() {
   const persist = useCallback((nextExpenses) => {
     setExpenses(nextExpenses);
     setItem(STORAGE_KEY, nextExpenses);
+  }, []);
+
+  const persistBudgets = useCallback((nextBudgets) => {
+    setBudgets(nextBudgets);
+    setItem(BUDGET_KEY, nextBudgets);
   }, []);
 
   // ── CRUD ──────────────────────────────────────────────────────────────────
@@ -89,18 +139,21 @@ export function useExpenses() {
     [expenses, persist]
   );
 
-  /**
-   * Quick-capture: parse "1200 flight" or just "1200" from a free-text string.
-   * Saves with sorted:false so user can categorize later.
-   */
   const quickCapture = useCallback(
-    (text) => {
+    (text, category = 'other') => {
       const trimmed = text.trim();
-      // Try to extract leading number
       const match = trimmed.match(/^([\d,]+(?:\.\d+)?)\s*(.*)/);
       const amount = match ? parseFloat(match[1].replace(/,/g, '')) : 0;
-      const note = match ? (match[2] || trimmed) : trimmed;
-      return addExpense({ amount, note: note || 'Quick capture', sorted: false });
+      let note = match ? (match[2] || trimmed) : trimmed;
+      
+      // Parse inline tags (e.g., #grocery)
+      const tags = [];
+      note = note.replace(/#(\w+)/g, (full, tag) => {
+        tags.push(tag.toLowerCase());
+        return '';
+      }).trim();
+
+      return addExpense({ amount, note: note || 'Quick capture', category, tags });
     },
     [addExpense]
   );
@@ -137,105 +190,42 @@ export function useExpenses() {
     setUndoBuffer(null);
   }, [undoBuffer]);
 
-  /**
-   * Log the actual amount for a recurring item and roll its nextDueDate forward.
-   */
-  const logRecurring = useCallback(
-    (id, amount, note) => {
-      const recurring = expenses.find((e) => e.id === id);
-      if (!recurring || !recurring.recurring) return;
-      const logged = createExpense({
-        amount,
-        category: recurring.category,
-        note: note || recurring.note,
-        date: getLocalDateString(),
-        linkedTaskId: recurring.linkedTaskId,
-        sorted: true,
-      });
-      const updatedRecurring = {
-        ...recurring,
-        recurring: advanceRecurring(recurring.recurring),
-      };
-      persist([logged, ...expenses.map((e) => (e.id === id ? updatedRecurring : e))]);
-    },
-    [expenses, persist]
-  );
+  // ── Budgets ───────────────────────────────────────────────────────────────
+  const updateBudget = useCallback((category, monthlyLimit, rolloverEnabled = false) => {
+    const data = { monthlyLimit, rolloverEnabled };
+    persistBudgets({ ...budgets, [category]: data });
+  }, [budgets, persistBudgets]);
 
   // ── Computed helpers ───────────────────────────────────────────────────────
   const getExpensesForDate = useCallback(
-    (selectedDate = new Date()) => expenses.filter((e) => !e.recurring && isSameDay(e.date, selectedDate)),
+    (selectedDate = new Date()) => expenses.filter((e) => isSameDay(e.date, selectedDate)),
     [expenses]
   );
 
-  const getDailyTotal = useCallback(
-    (selectedDate = new Date()) =>
-      getExpensesForDate(selectedDate).reduce((sum, e) => sum + (e.amount || 0), 0),
-    [getExpensesForDate]
-  );
-
-  const getThisWeekTotal = useCallback((selectedDate = new Date()) => {
-    const weekStart = getWeekStart(selectedDate);
-    return expenses
-      .filter((e) => !e.recurring && new Date(e.date) >= weekStart && new Date(e.date) < new Date(weekStart.getTime() + 7 * 24 * 60 * 60 * 1000))
-      .reduce((sum, e) => sum + (e.amount || 0), 0);
-  }, [expenses]);
-
-  const getRecurringItems = useCallback(
-    () => expenses.filter((e) => e.recurring !== null),
-    [expenses]
-  );
-
-  const getOverdueRecurring = useCallback(() => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    return getRecurringItems().filter(
-      (e) => e.recurring && new Date(e.recurring.nextDueDate) <= today
-    );
-  }, [getRecurringItems]);
-
-  /**
-   * No-spend streak: consecutive days ending today with zero non-recurring expenses.
-   */
-  const getNoSpendStreak = useCallback(() => {
-    const nonRecurring = expenses.filter((e) => !e.recurring);
-    if (nonRecurring.length === 0) return 0;
-
-    // Build a Set of date strings that had expenses
-    const spendDays = new Set(nonRecurring.map((e) => e.date));
-
-    let streak = 0;
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
-    // Walk backwards from today
-    const cursor = new Date(today);
-    while (true) {
-      const dateStr = getLocalDateString(cursor);
-      if (spendDays.has(dateStr)) break;
-      streak++;
-      cursor.setDate(cursor.getDate() - 1);
-      // Safety: don't loop more than 365 days
-      if (streak > 365) break;
-    }
-    return streak;
+  const getMonthlySpendByCategory = useCallback((year, month) => {
+    // month is 0-indexed
+    const filtered = expenses.filter(e => {
+      const d = new Date(e.date);
+      return d.getFullYear() === year && d.getMonth() === month;
+    });
+    const map = {};
+    filtered.forEach(e => {
+      map[e.category] = (map[e.category] || 0) + e.amount;
+    });
+    return map;
   }, [expenses]);
 
   const getRecentExpenses = useCallback(
     (limit = 30) =>
       [...expenses]
-        .filter((e) => !e.recurring)
         .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
         .slice(0, limit),
     [expenses]
   );
 
-  const getUnsortedExpenses = useCallback(
-    () => expenses.filter((e) => !e.sorted),
-    [expenses]
-  );
-
   return {
     expenses,
+    budgets,
     loading,
     undoBuffer,
     addExpense,
@@ -244,14 +234,9 @@ export function useExpenses() {
     deleteExpense,
     undoDeleteExpense,
     dismissUndo,
-    logRecurring,
+    updateBudget,
     getExpensesForDate,
-    getDailyTotal,
-    getThisWeekTotal,
-    getRecurringItems,
-    getOverdueRecurring,
-    getNoSpendStreak,
+    getMonthlySpendByCategory,
     getRecentExpenses,
-    getUnsortedExpenses,
   };
 }

@@ -30,6 +30,16 @@
   }
 }
 
+* {
+  -webkit-tap-highlight-color: rgba(0,0,0,0) !important;
+  outline: none !important;
+}
+
+button, a, input, select, textarea, [role="button"] {
+  -webkit-tap-highlight-color: rgba(0,0,0,0) !important;
+  outline: none !important;
+}
+
 @media (prefers-color-scheme: dark) {
   :root {
     --text: #9ca3af;
@@ -131,4 +141,9 @@ code {
 }
 .wheel-picker::-webkit-scrollbar {
   display: none; /* Chrome, Safari */
+}
+
+@keyframes slideUp {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
 }

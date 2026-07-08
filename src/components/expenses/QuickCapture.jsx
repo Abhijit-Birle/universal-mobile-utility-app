@@ -1,9 +1,8 @@
 import { useState } from 'react';
 import Icon from '../ui/Icon.jsx';
-import '../../styles/expenses.css';
 import { EXPENSE_CATEGORIES } from '../../constants/categories.js';
 
-export default function QuickCapture({ onCaptureExpense, onCaptureTask, onCaptureHabit, onOpenEditor }) {
+export default function QuickCapture({ onCaptureExpense, onCaptureTask, onCaptureHabit, onOpenEditor, theme, fontBody }) {
   const [val, setVal] = useState('');
 
   const type = val.toLowerCase().startsWith('task:') ? 'task' :
@@ -14,7 +13,7 @@ export default function QuickCapture({ onCaptureExpense, onCaptureTask, onCaptur
     if (!text) return null;
     const lower = text.toLowerCase();
     const found = Object.values(EXPENSE_CATEGORIES).find(c =>
-      c.keywords.some(kw => lower.includes(kw))
+      c.keywords && c.keywords.some(kw => lower.includes(kw))
     );
     return found ? found.label : null;
   };
@@ -22,9 +21,9 @@ export default function QuickCapture({ onCaptureExpense, onCaptureTask, onCaptur
   const detectedCat = type === 'expense' ? detectCategory(val) : null;
   
   let tagText = '';
-  let tagColor = 'var(--text-secondary)';
-  if (type === 'task') { tagText = 'Task'; tagColor = 'var(--accent-primary)'; }
-  else if (type === 'habit') { tagText = 'Habit'; tagColor = 'var(--accent-secondary)'; }
+  let tagColor = theme.textSecondary;
+  if (type === 'task') { tagText = 'Task'; tagColor = theme.accent; }
+  else if (type === 'habit') { tagText = 'Habit'; tagColor = theme.accent2; }
   else if (detectedCat) { tagText = detectedCat; }
   else if (val.trim()) { tagText = 'Expense'; }
 
@@ -50,13 +49,17 @@ export default function QuickCapture({ onCaptureExpense, onCaptureTask, onCaptur
   };
 
   return (
-    <div className="neu-inset" style={{ display: 'flex', alignItems: 'center', padding: '6px 12px', borderRadius: 24 }}>
+    <div style={{ 
+      background: theme.bg, 
+      boxShadow: theme.shadowPressed,
+      display: 'flex', alignItems: 'center', padding: '8px 16px', borderRadius: 24 
+    }}>
       <button
         onClick={handleSubmit}
         style={{
           background: 'transparent', border: 'none',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
-          color: 'var(--accent-primary)', cursor: 'pointer',
+          color: theme.accent, cursor: 'pointer',
           padding: 8
         }}
         aria-label="Add"
@@ -74,20 +77,24 @@ export default function QuickCapture({ onCaptureExpense, onCaptureTask, onCaptur
         style={{
           flex: 1,
           background: 'transparent', border: 'none', outline: 'none',
-          fontSize: 15, color: 'var(--text-primary)', padding: '8px 12px'
+          fontSize: 15, color: theme.textPrimary, padding: '8px 12px',
+          ...fontBody
         }}
         aria-label="Quick add"
         autoComplete="off"
       />
       
       {tagText && (
-        <div className="neu-card-sm" style={{ 
-          padding: '4px 10px', 
+        <div style={{ 
+          padding: '4px 12px', 
           borderRadius: 12, 
           fontSize: 12, 
           color: tagColor,
-          fontWeight: 500,
-          display: 'flex', alignItems: 'center', gap: 4 
+          fontWeight: 600,
+          background: theme.bg,
+          boxShadow: theme.shadowRaisedSm,
+          display: 'flex', alignItems: 'center', gap: 4,
+          ...fontBody 
         }}>
           {tagText}
         </div>

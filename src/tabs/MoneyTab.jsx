@@ -1,21 +1,37 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import QuickCapture from '../components/expenses/QuickCapture.jsx';
 import ExpenseEditor from '../components/expenses/ExpenseEditor.jsx';
+import BudgetSettings from '../components/expenses/BudgetSettings.jsx';
+import FilterBar from '../components/expenses/FilterBar.jsx';
 import Icon from '../components/ui/Icon.jsx';
 import { EXPENSE_CATEGORIES } from '../constants/categories.js';
-import '../styles/expenses.css';
+import { useExpenses } from '../hooks/useExpenses.js';
+import { generateExpenseCsv, downloadCsv } from '../utils/exportCsv.js';
 
-export default function MoneyTab({
-  expenses,
-  settings,
-  onQuickCapture,
-  onAdd,
-  onUpdate,
-  onDelete,
-  getRecentExpenses,
-}) {
+export default function MoneyTab({ theme, NeoSurface, NeoInput, PrimaryButton, SectionLabel, fontDisplay, fontBody }) {
+  const {
+    expenses,
+    budgets,
+    loading,
+    undoBuffer,
+    quickCapture,
+    addExpense,
+    updateExpense,
+    deleteExpense,
+    undoDeleteExpense,
+    dismissUndo,
+    updateBudget
+  } = useExpenses();
+
   const [editorState, setEditorState] = useState(null);
-  const [view, setView] = useState('month');
+  const [showBudgetSettings, setShowBudgetSettings] = useState(false);
+  const [filters, setFilters] = useState({
+    startDate: '',
+    endDate: '',
+    category: '',
+    minAmount: '',
+    maxAmount: ''
+  });
 
   const handleEdit = (expense) => {
     setEditorState({ mode: 'edit', expense, initialCategory: null });
@@ -24,138 +40,211 @@ export default function MoneyTab({
   const handleClose = () => setEditorState(null);
 
   const handleSave = (expenseData) => {
-    if (!expenseData.id) onAdd(expenseData);
-    else onUpdate(expenseData.id, expenseData);
+    if (!expenseData.id) addExpense(expenseData);
+    else updateExpense(expenseData.id, expenseData);
   };
 
-  const recent = getRecentExpenses(50);
+  const handleExport = () => {
+    const csv = generateExpenseCsv(filteredExpenses);
+    downloadCsv(csv, 'neoapp_expenses.csv');
+  };
 
-  // Group by category
-  const grouped = recent.reduce((acc, exp) => {
-    const cat = EXPENSE_CATEGORIES[exp.category] || EXPENSE_CATEGORIES.other;
-    if (!acc[cat.id]) acc[cat.id] = { cat, expenses: [] };
-    acc[cat.id].expenses.push(exp);
+  // ─── Filtering ─────────────────────────────────────────────────────────────
+  const filteredExpenses = useMemo(() => {
+    return expenses.filter(e => {
+      if (filters.startDate && new Date(e.date) < new Date(filters.startDate)) return false;
+      if (filters.endDate && new Date(e.date) > new Date(filters.endDate)) return false;
+      if (filters.category && e.category !== filters.category) return false;
+      if (filters.minAmount && e.amount < parseFloat(filters.minAmount)) return false;
+      if (filters.maxAmount && e.amount > parseFloat(filters.maxAmount)) return false;
+      return true;
+    }).sort((a, b) => new Date(b.date) - new Date(a.date));
+  }, [expenses, filters]);
+
+  // Group filtered expenses by category
+  const grouped = filteredExpenses.reduce((acc, exp) => {
+    const catId = exp.category || 'other';
+    const cat = EXPENSE_CATEGORIES[catId] || EXPENSE_CATEGORIES.other;
+    if (!acc[catId]) acc[catId] = { cat, expenses: [] };
+    acc[catId].expenses.push(exp);
     return acc;
   }, {});
   
   const groups = Object.values(grouped).sort((a, b) => b.expenses.length - a.expenses.length);
 
-  // Budget calculations
-  const budgetTotal = settings?.monthlyBudgetAmount || 50000;
-  const thisMonthExpenses = expenses.filter(e => {
-    const d = new Date(e.createdAt);
-    const now = new Date();
+  // ─── Budgets (Current Month) ───────────────────────────────────────────────
+  const now = new Date();
+  const currentMonthExpenses = expenses.filter(e => {
+    const d = new Date(e.date);
     return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
   });
-  const monthSpend = thisMonthExpenses.reduce((sum, e) => sum + (e.amount || 0), 0);
-  const budgetPercent = Math.min(100, Math.round((monthSpend / budgetTotal) * 100));
   
-  const r = 60;
-  const c = 2 * Math.PI * r;
-  const dashoffset = c - (budgetPercent / 100) * c;
+  const monthSpendByCategory = currentMonthExpenses.reduce((acc, e) => {
+    acc[e.category] = (acc[e.category] || 0) + e.amount;
+    return acc;
+  }, {});
 
-  // Mock bar chart data (last 7 days or weeks)
-  const chartData = [40, 60, 20, 80, 50, 90, 30]; // percentages
+  const activeBudgets = Object.entries(budgets)
+    .map(([cat, data]) => ({
+      category: cat,
+      monthlyLimit: data.monthlyLimit || 0,
+      spent: monthSpendByCategory[cat] || 0
+    }))
+    .filter(b => b.monthlyLimit > 0);
+
+  if (loading) {
+    return <div style={{ padding: 20, color: theme.textSecondary, ...fontBody }}>Loading expenses...</div>;
+  }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-      <div className="scroll-content" style={{ paddingBottom: 100 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', position: 'relative' }}>
+      
+      {undoBuffer && (
+        <div style={{
+          position: 'absolute', top: 20, left: '50%', transform: 'translateX(-50%)',
+          background: theme.textPrimary, color: theme.bg, padding: '12px 24px',
+          borderRadius: 24, zIndex: 100, display: 'flex', gap: 16, alignItems: 'center',
+          boxShadow: '0 8px 24px rgba(0,0,0,0.2)', ...fontBody
+        }}>
+          <span style={{ fontSize: 13, fontWeight: 500 }}>Expense deleted</span>
+          <button onClick={undoDeleteExpense} style={{ background: 'none', border: 'none', color: theme.bg, fontWeight: 700, cursor: 'pointer' }}>UNDO</button>
+          <button onClick={dismissUndo} style={{ background: 'none', border: 'none', color: theme.textSecondary, cursor: 'pointer' }}>✕</button>
+        </div>
+      )}
+
+      <div className="scroll-content" style={{ padding: '24px 18px 100px' }}>
         
-        {/* Toggle */}
-        <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 24 }}>
-          <div className="neu-inset" style={{ display: 'flex', padding: 4, borderRadius: 999, gap: 4 }}>
-            <button
-              className={view === 'week' ? "neu-card-sm" : ""}
-              onClick={() => setView('week')}
-              style={{ padding: '8px 24px', border: 'none', background: view === 'week' ? 'var(--bg-app)' : 'transparent', borderRadius: 999, fontSize: 13, fontWeight: view === 'week' ? 600 : 400, color: view === 'week' ? 'var(--accent-primary)' : 'var(--text-secondary)' }}
-            >
-              Week
-            </button>
-            <button
-              className={view === 'month' ? "neu-card-sm" : ""}
-              onClick={() => setView('month')}
-              style={{ padding: '8px 24px', border: 'none', background: view === 'month' ? 'var(--bg-app)' : 'transparent', borderRadius: 999, fontSize: 13, fontWeight: view === 'month' ? 600 : 400, color: view === 'month' ? 'var(--accent-primary)' : 'var(--text-secondary)' }}
-            >
-              Month
-            </button>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
+          <div>
+            <h2 style={{ fontSize: 26, fontWeight: 700, color: theme.textPrimary, margin: 0, ...fontDisplay }}>Expense Tracker</h2>
+            <p style={{ fontSize: 14, color: theme.textSecondary, margin: '4px 0 0 0', ...fontBody }}>Track your spending</p>
           </div>
-        </div>
-
-        {/* Big Budget Ring */}
-        <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 24 }}>
-          <div style={{ position: 'relative', width: 140, height: 140 }}>
-            <svg width="140" height="140" style={{ transform: 'rotate(-90deg)' }}>
-              <circle cx="70" cy="70" r={r} fill="none" stroke="var(--bg-card-2)" strokeWidth="12" />
-              <circle 
-                cx="70" cy="70" r={r} fill="none" 
-                stroke="var(--accent-primary)" 
-                strokeWidth="12"
-                strokeDasharray={c}
-                strokeDashoffset={dashoffset}
-                strokeLinecap="round"
-                style={{ transition: 'stroke-dashoffset 0.5s ease' }}
-              />
-            </svg>
-            <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column' }}>
-              <span style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 4 }}>Spent</span>
-              <span style={{ fontSize: 20, fontWeight: 600, color: 'var(--text-primary)' }}>₹{(monthSpend/1000).toFixed(1)}k</span>
-            </div>
-          </div>
-        </div>
-
-        {/* Bar Chart */}
-        <div className="neu-card" style={{ marginBottom: 24, padding: '20px 16px' }}>
-          <h3 style={{ fontSize: 14, color: 'var(--text-secondary)', margin: '0 0 16px 0' }}>Daily Spend</h3>
-          <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', height: 120, paddingBottom: 24, position: 'relative' }}>
-            {chartData.map((h, i) => (
-              <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
-                <div style={{ width: 32, height: 120, display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
-                  <div style={{ width: 16, height: `${h}%`, background: 'var(--accent-primary)', borderRadius: 8, boxShadow: 'var(--shadow-raised-sm)' }} />
-                </div>
-                <span style={{ position: 'absolute', bottom: 0, fontSize: 10, color: 'var(--text-muted)' }}>
-                  {['S','M','T','W','T','F','S'][i]}
-                </span>
-              </div>
-            ))}
-          </div>
+          <button 
+            onClick={handleExport} 
+            style={{ 
+              background: theme.bg, 
+              color: theme.textPrimary, 
+              border: 'none', 
+              boxShadow: theme.shadowRaised,
+              borderRadius: 12,
+              padding: '8px 16px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              fontSize: 13,
+              fontWeight: 600,
+              cursor: 'pointer',
+              ...fontBody
+            }}
+          >
+            <Icon name="download" size={16} /> CSV
+          </button>
         </div>
 
         <QuickCapture 
-          onCapture={onQuickCapture} 
+          onCaptureExpense={quickCapture} 
           onOpenEditor={() => setEditorState({ mode: 'new', expense: null, initialCategory: 'other' })} 
+          theme={theme} fontBody={fontBody}
         />
-        
+
         <div style={{ marginTop: 24 }}>
-          <h3 style={{ fontSize: 14, color: 'var(--text-secondary)', margin: '0 0 16px 0' }}>By Category</h3>
+          <FilterBar filters={filters} setFilters={setFilters} theme={theme} fontBody={fontBody} fontDisplay={fontDisplay} NeoSurface={NeoSurface} NeoInput={NeoInput} />
+        </div>
+
+        {activeBudgets.length > 0 && (
+          <div style={{ marginTop: 24, marginBottom: 32 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+              <SectionLabel label="Budgets" />
+              <button onClick={() => setShowBudgetSettings(true)} style={{ background: 'none', border: 'none', color: theme.accent, fontWeight: 600, fontSize: 13, cursor: 'pointer', ...fontBody }}>
+                Edit
+              </button>
+            </div>
+            
+            <NeoSurface style={{ padding: '24px 20px', display: 'flex', flexDirection: 'column', gap: 24 }}>
+              {activeBudgets.map(b => {
+                const catData = EXPENSE_CATEGORIES[b.category];
+                const pct = Math.min(100, (b.spent / b.monthlyLimit) * 100);
+                const over80 = pct >= 80 && pct < 100;
+                const over100 = pct >= 100;
+                
+                let barColor = catData ? catData.color : theme.accent;
+                if (over100) barColor = '#ff6b6b';
+                else if (over80) barColor = 'orange';
+
+                return (
+                  <div key={b.category}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}>
+                      <span style={{ color: theme.textPrimary, fontSize: 15, fontWeight: 600, ...fontBody }}>
+                        {catData ? catData.label : b.category}
+                      </span>
+                      <span style={{ color: over100 ? '#ff6b6b' : theme.textSecondary, fontSize: 15, fontWeight: 600, ...fontBody }}>
+                        ₹{b.spent.toLocaleString()} / ₹{b.monthlyLimit.toLocaleString()}
+                      </span>
+                    </div>
+                    <NeoSurface pressed style={{ height: 10, padding: 0, borderRadius: 5, overflow: 'hidden' }}>
+                      <div style={{ height: '100%', width: `${pct}%`, borderRadius: 5, background: barColor, transition: 'width 0.3s ease, background-color 0.3s ease' }} />
+                    </NeoSurface>
+                    {over100 && <div style={{ fontSize: 11, color: '#ff6b6b', marginTop: 6, fontWeight: 600, ...fontBody }}>Over budget!</div>}
+                    {over80 && !over100 && <div style={{ fontSize: 11, color: 'orange', marginTop: 6, fontWeight: 600, ...fontBody }}>Nearing limit</div>}
+                  </div>
+                );
+              })}
+            </NeoSurface>
+          </div>
+        )}
+
+        {activeBudgets.length === 0 && (
+          <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 16 }}>
+            <button onClick={() => setShowBudgetSettings(true)} style={{ background: 'none', border: 'none', color: theme.accent, fontWeight: 600, fontSize: 13, cursor: 'pointer', ...fontBody }}>
+              + Add Budgets
+            </button>
+          </div>
+        )}
+
+        <div style={{ marginTop: 24 }}>
+          <SectionLabel label="Transactions" />
           {groups.length === 0 ? (
-            <div className="empty-state">
-              <p className="empty-state-title">No expenses yet</p>
+            <div style={{ textAlign: 'center', padding: '40px 20px', color: theme.textSecondary, ...fontBody }}>
+              No expenses found
             </div>
           ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 16, marginTop: 16 }}>
               {groups.map((group) => {
                 const total = group.expenses.reduce((s, e) => s + (e.amount || 0), 0);
                 return (
-                  <div key={group.cat.id} className="neu-card" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                  <NeoSurface key={group.cat.id || group.cat.label} style={{ display: 'flex', flexDirection: 'column', gap: 16, padding: '20px 16px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <div style={{ width: 32, height: 32, borderRadius: 10, background: 'var(--bg-app)', boxShadow: 'var(--shadow-raised-sm)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: group.cat.color }}>
-                          <Icon name={group.cat.icon} size={18} />
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                        <div style={{ 
+                          width: 36, height: 36, borderRadius: 12, 
+                          background: theme.bg, boxShadow: theme.shadowRaisedSm, 
+                          display: 'flex', alignItems: 'center', justifyContent: 'center', 
+                          color: group.cat.color 
+                        }}>
+                          <Icon name={group.cat.icon} size={20} />
                         </div>
-                        <span style={{ fontSize: 15, fontWeight: 500, color: 'var(--text-primary)' }}>{group.cat.label}</span>
+                        <span style={{ fontSize: 16, fontWeight: 600, color: theme.textPrimary, ...fontBody }}>{group.cat.label}</span>
                       </div>
-                      <span style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-primary)' }}>₹{total.toLocaleString('en-IN')}</span>
+                      <span style={{ fontSize: 16, fontWeight: 700, color: theme.textPrimary, ...fontBody }}>₹{total.toLocaleString('en-IN')}</span>
                     </div>
-                    {/* Items */}
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8, paddingLeft: 40 }}>
+                    
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 12, paddingLeft: 48 }}>
                       {group.expenses.map(exp => (
-                        <div key={exp.id} onClick={() => handleEdit(exp)} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: 'var(--text-secondary)', cursor: 'pointer' }}>
-                          <span>{exp.note || 'Entry'}</span>
-                          <span>₹{exp.amount?.toLocaleString('en-IN')}</span>
+                        <div key={exp.id} onClick={() => handleEdit(exp)} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }}>
+                          <div style={{ display: 'flex', flexDirection: 'column' }}>
+                            <span style={{ fontSize: 14, color: theme.textPrimary, fontWeight: 500, ...fontBody }}>{exp.note || 'Entry'}</span>
+                            <span style={{ fontSize: 11, color: theme.textSecondary, display: 'flex', gap: 8, ...fontBody }}>
+                              {exp.date} {exp.subcategory ? `• ${exp.subcategory}` : ''} 
+                              {exp.recurring && ' • 🔄'}
+                            </span>
+                          </div>
+                          <span style={{ fontSize: 14, fontWeight: 600, color: '#ff6b6b', ...fontBody }}>
+                            -₹{exp.amount?.toLocaleString('en-IN')}
+                          </span>
                         </div>
                       ))}
                     </div>
-                  </div>
+                  </NeoSurface>
                 );
               })}
             </div>
@@ -168,8 +257,28 @@ export default function MoneyTab({
           expense={editorState.expense}
           initialCategory={editorState.initialCategory}
           onSave={handleSave}
-          onDelete={onDelete}
+          onDelete={deleteExpense}
           onClose={handleClose}
+          theme={theme}
+          fontDisplay={fontDisplay}
+          fontBody={fontBody}
+          NeoSurface={NeoSurface}
+          PrimaryButton={PrimaryButton}
+          NeoInput={NeoInput}
+        />
+      )}
+
+      {showBudgetSettings && (
+        <BudgetSettings
+          budgets={budgets}
+          onUpdateBudget={updateBudget}
+          onClose={() => setShowBudgetSettings(false)}
+          theme={theme}
+          fontDisplay={fontDisplay}
+          fontBody={fontBody}
+          NeoSurface={NeoSurface}
+          PrimaryButton={PrimaryButton}
+          NeoInput={NeoInput}
         />
       )}
     </div>

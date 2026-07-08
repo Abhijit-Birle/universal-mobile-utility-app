@@ -148,12 +148,19 @@ code {
   to { transform: translateY(0); }
 }
 
-/* Hide default webkit date/time icons so we can use custom icons */
+/* Hide default webkit date/time icons reliably */
 input[type="date"]::-webkit-calendar-picker-indicator,
 input[type="time"]::-webkit-calendar-picker-indicator,
 input[type="datetime-local"]::-webkit-calendar-picker-indicator {
-  display: none;
-  -webkit-appearance: none;
+  opacity: 0;
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  width: 100%;
+  height: 100%;
+  cursor: pointer;
 }
 
 input[type="date"], input[type="time"], input[type="datetime-local"] {

@@ -1628,7 +1628,7 @@ export default function NeoApp() {
       .map(([cat, val], i, arr) => ({
         name: cat,
         value: val,
-        fill: `hsl(${(i * 360 / arr.length)}, 70%, 55%)`
+        fill: `hsl(${(i * 360 / arr.length)}, 50%, 75%)`
       }));
 
     const BUDGETS = EXPENSE_CATEGORIES.map(cat => ({
@@ -2263,7 +2263,7 @@ export default function NeoApp() {
                           </div>
                           <div style={{ display: "flex", alignItems: "center", gap: 8, color: theme.textSecondary, fontSize: 11, ...fontBody }}>
                             <span>{t.name}</span>
-                            <span style={{ display: "flex", alignItems: "center", gap: 3 }}>{methodIcon(t.method)} {methodLabel(t.method)}</span>
+
                             {t.originalCurrency && t.originalCurrency !== baseCurrency && (
                               <span style={{ color: theme.textSecondary }}>· {formatCurrency(t.originalAmount, t.originalCurrency)}</span>
                             )}

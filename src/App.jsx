@@ -1589,6 +1589,40 @@ export default function NeoApp() {
       setTransactions((t) => t.filter((x) => x.id !== id));
     };
 
+    // ponytail: swipe-left to reveal delete — no library, no abstraction
+    const SwipeRow = ({ onDelete, children, style }) => {
+      const [offset, setOffset] = React.useState(0);
+      const startX = React.useRef(0);
+      const dragging = React.useRef(false);
+      const THRESHOLD = 60;
+      const onTouchStart = (e) => { startX.current = e.touches[0].clientX; dragging.current = true; };
+      const onTouchMove = (e) => {
+        if (!dragging.current) return;
+        const dx = e.touches[0].clientX - startX.current;
+        if (dx < 0) setOffset(Math.max(dx, -THRESHOLD));
+      };
+      const onTouchEnd = () => {
+        dragging.current = false;
+        setOffset(o => o < -THRESHOLD / 2 ? -THRESHOLD : 0);
+      };
+      return (
+        <div style={{ position: 'relative', overflow: 'hidden', borderRadius: 20, ...style }}>
+          {/* delete bg */}
+          <div style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: THRESHOLD, background: theme.danger, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '0 20px 20px 0' }}
+            onClick={onDelete}>
+            <Trash2 size={18} color="#fff" />
+          </div>
+          {/* sliding content */}
+          <div
+            style={{ transform: `translateX(${offset}px)`, transition: dragging.current ? 'none' : 'transform .2s' }}
+            onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd}
+          >
+            {children}
+          </div>
+        </div>
+      );
+    };
+
     const openEdit = (tx) => {
       setEditingTxId(tx.id);
       setNewType(tx.type);
@@ -1905,18 +1939,20 @@ export default function NeoApp() {
               {transactions.slice(0, 4).map((t) => {
                 const isExp = t.type === "expense";
                 return (
-                  <NeoSurface key={t.id} style={{ padding: 16, display: "flex", alignItems: "center", gap: 14 }}>
-                    <div style={{ width: 40, height: 40, borderRadius: 12, background: isExp ? `${theme.danger}15` : `${theme.success}15`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18 }}>
-                      {CATEGORY_EMOJIS[t.category] || "📦"}
-                    </div>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ color: theme.textPrimary, fontSize: 14, fontWeight: 700, marginBottom: 2, ...fontBody }}>{t.category}</div>
-                      <div style={{ color: theme.textSecondary, fontSize: 11, ...fontBody }}>{t.desc} • {t.date}</div>
-                    </div>
-                    <span style={{ fontSize: 14, fontWeight: 600, color: isExp ? theme.danger : theme.success, ...fontBody }}>
-                      {isExp ? "-" : "+"}{formatCurrency(t.amount, baseCurrency)}
-                    </span>
-                  </NeoSurface>
+                  <SwipeRow key={t.id} onDelete={() => deleteTx(t.id)}>
+                    <NeoSurface style={{ padding: 16, display: "flex", alignItems: "center", gap: 14, borderRadius: 20 }}>
+                      <div style={{ width: 40, height: 40, borderRadius: 12, background: isExp ? `${theme.danger}15` : `${theme.success}15`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18 }}>
+                        {CATEGORY_EMOJIS[t.category] || "📦"}
+                      </div>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ color: theme.textPrimary, fontSize: 14, fontWeight: 700, marginBottom: 2, ...fontBody }}>{t.category}</div>
+                        <div style={{ color: theme.textSecondary, fontSize: 11, ...fontBody }}>{t.desc} • {t.date}</div>
+                      </div>
+                      <span style={{ fontSize: 14, fontWeight: 600, color: isExp ? theme.danger : theme.success, ...fontBody }}>
+                        {isExp ? "-" : "+"}{formatCurrency(t.amount, baseCurrency)}
+                      </span>
+                    </NeoSurface>
+                  </SwipeRow>
                 );
               })}
             </div>
@@ -1954,24 +1990,25 @@ export default function NeoApp() {
                   };
 
                   return (
-                    <NeoSurface key={b.id} style={{ padding: "12px 14px", display: "flex", alignItems: "center", gap: 10 }}>
-                      <div style={{ width: 36, height: 36, borderRadius: 12, flexShrink: 0, background: theme.bg, boxShadow: theme.shadowRaisedSm, display: "flex", alignItems: "center", justifyContent: "center", color: daysUntilDue <= 3 ? theme.danger : theme.accent }}>
-                        <Bell size={16} />
-                      </div>
-                      <div style={{ flex: 1 }}>
-                        <div style={{ color: theme.textPrimary, fontWeight: 600, fontSize: 13.5, ...fontBody }}>{b.name}</div>
-                        <div style={{ color: theme.textSecondary, fontSize: 11, ...fontBody }}>Due on the {getOrdinal(b.daysLeft)} • {daysUntilDue} day{daysUntilDue !== 1 ? "s" : ""} left</div>
-                      </div>
-                      <div style={{ display: "flex", alignItems: "center" }}>
-                        <div style={{ color: theme.textPrimary, fontWeight: 700, fontSize: 13.5, marginRight: 8, ...fontDisplay }}>{formatCurrency(b.amount, baseCurrency)}</div>
-                        <button onClick={() => {
-                          setEditingBill(b);
-                          setBillFormState({ name: b.name, amount: b.amount.toString(), daysLeft: b.daysLeft.toString() });
-                          setShowBillModal(true);
-                        }} style={{ border: "none", background: "none", color: theme.textSecondary, cursor: "pointer" }}><Pencil size={14} /></button>
-                        <button onClick={() => setUpcomingBills(bills => bills.filter(x => x.id !== b.id))} style={{ border: "none", background: "none", color: theme.danger, cursor: "pointer" }}><Trash2 size={14} /></button>
-                      </div>
-                    </NeoSurface>
+                    <SwipeRow key={b.id} onDelete={() => setUpcomingBills(bills => bills.filter(x => x.id !== b.id))}>
+                      <NeoSurface style={{ padding: "12px 14px", display: "flex", alignItems: "center", gap: 10, borderRadius: 20 }}>
+                        <div style={{ width: 36, height: 36, borderRadius: 12, flexShrink: 0, background: theme.bg, boxShadow: theme.shadowRaisedSm, display: "flex", alignItems: "center", justifyContent: "center", color: daysUntilDue <= 3 ? theme.danger : theme.accent }}>
+                          <Bell size={16} />
+                        </div>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ color: theme.textPrimary, fontWeight: 600, fontSize: 13.5, ...fontBody }}>{b.name}</div>
+                          <div style={{ color: theme.textSecondary, fontSize: 11, ...fontBody }}>Due on the {getOrdinal(b.daysLeft)} • {daysUntilDue} day{daysUntilDue !== 1 ? "s" : ""} left</div>
+                        </div>
+                        <div style={{ display: "flex", alignItems: "center" }}>
+                          <div style={{ color: theme.textPrimary, fontWeight: 700, fontSize: 13.5, marginRight: 8, ...fontDisplay }}>{formatCurrency(b.amount, baseCurrency)}</div>
+                          <button onClick={() => {
+                            setEditingBill(b);
+                            setBillFormState({ name: b.name, amount: b.amount.toString(), daysLeft: b.daysLeft.toString() });
+                            setShowBillModal(true);
+                          }} style={{ border: "none", background: "none", color: theme.textSecondary, cursor: "pointer" }}><Pencil size={14} /></button>
+                        </div>
+                      </NeoSurface>
+                    </SwipeRow>
                   );
                 })}
               </div>
@@ -2022,40 +2059,41 @@ export default function NeoApp() {
 
             <div style={{ marginTop: 20 }}>
               <SectionLabel>{selectedDate ? `Transactions on ${selectedDate} ${monthLabel}` : "All transactions"}</SectionLabel>
-              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                 {dayFiltered.map((t) => {
                   return (
-                    <NeoSurface key={t.id} style={{ padding: "12px 14px", display: "flex", alignItems: "center", gap: 10 }}>
-                      <div style={{
-                        width: 36, height: 36, borderRadius: 12, flexShrink: 0, background: theme.bg,
-                        boxShadow: theme.shadowRaisedSm, display: "flex", alignItems: "center", justifyContent: "center",
-                        fontSize: 16
-                      }}>
-                        {CATEGORY_EMOJIS[t.category] || "📦"}
-                      </div>
-                      <div style={{ display: "flex", flexDirection: "column", gap: 3, flex: 1 }}>
-                        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                          <span style={{ color: theme.textPrimary, fontWeight: 600, fontSize: 13.5, ...fontBody }}>{t.category}</span>
-                          {t.recurring && <Repeat size={12} color={theme.textSecondary} />}
-                          {t.split && <Split size={12} color={theme.accent} />}
+                    <SwipeRow key={t.id} onDelete={() => deleteTx(t.id)}>
+                      <NeoSurface style={{ padding: "12px 14px", display: "flex", alignItems: "center", gap: 10, borderRadius: 20 }}>
+                        <div style={{
+                          width: 36, height: 36, borderRadius: 12, flexShrink: 0, background: theme.bg,
+                          boxShadow: theme.shadowRaisedSm, display: "flex", alignItems: "center", justifyContent: "center",
+                          fontSize: 16
+                        }}>
+                          {CATEGORY_EMOJIS[t.category] || "📦"}
                         </div>
-                        <div style={{ display: "flex", alignItems: "center", gap: 8, color: theme.textSecondary, fontSize: 11, ...fontBody }}>
-                          <span>{t.name}</span>
-                          <span style={{ display: "flex", alignItems: "center", gap: 3 }}>{methodIcon(t.method)} {methodLabel(t.method)}</span>
-                          {t.originalCurrency && t.originalCurrency !== baseCurrency && (
-                            <span style={{ color: theme.textSecondary }}>· {formatCurrency(t.originalAmount, t.originalCurrency)}</span>
-                          )}
-                          {t.split && <span style={{ color: theme.accent }}>· split with {t.splitWith}</span>}
+                        <div style={{ display: "flex", flexDirection: "column", gap: 3, flex: 1 }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                            <span style={{ color: theme.textPrimary, fontWeight: 600, fontSize: 13.5, ...fontBody }}>{t.category}</span>
+                            {t.recurring && <Repeat size={12} color={theme.textSecondary} />}
+                            {t.split && <Split size={12} color={theme.accent} />}
+                          </div>
+                          <div style={{ display: "flex", alignItems: "center", gap: 8, color: theme.textSecondary, fontSize: 11, ...fontBody }}>
+                            <span>{t.name}</span>
+                            <span style={{ display: "flex", alignItems: "center", gap: 3 }}>{methodIcon(t.method)} {methodLabel(t.method)}</span>
+                            {t.originalCurrency && t.originalCurrency !== baseCurrency && (
+                              <span style={{ color: theme.textSecondary }}>· {formatCurrency(t.originalAmount, t.originalCurrency)}</span>
+                            )}
+                            {t.split && <span style={{ color: theme.accent }}>· split with {t.splitWith}</span>}
+                          </div>
                         </div>
-                      </div>
-                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                        <span style={{ fontSize: 14, fontWeight: 700, color: t.type === "income" ? theme.success : theme.danger, ...fontBody }}>
-                          {t.type === "income" ? "+" : "-"}{formatCurrency(t.amount, baseCurrency)}
-                        </span>
-                        <button onClick={() => openEdit(t)} style={{ border: "none", background: "none", color: theme.textSecondary }}><Pencil size={14} /></button>
-                        <button onClick={() => deleteTx(t.id)} style={{ border: "none", background: "none", color: theme.danger }}><Trash2 size={14} /></button>
-                      </div>
-                    </NeoSurface>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                          <span style={{ fontSize: 14, fontWeight: 700, color: t.type === "income" ? theme.success : theme.danger, ...fontBody }}>
+                            {t.type === "income" ? "+" : "-"}{formatCurrency(t.amount, baseCurrency)}
+                          </span>
+                          <button onClick={() => openEdit(t)} style={{ border: "none", background: "none", color: theme.textSecondary }}><Pencil size={14} /></button>
+                        </div>
+                      </NeoSurface>
+                    </SwipeRow>
                   );
                 })}
               </div>

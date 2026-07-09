@@ -288,24 +288,32 @@ const useLocalStorage = (key, initialValue) => {
       return initialValue;
     }
   });
-  useEffect(() => {
-    try {
-      window.localStorage.setItem(key, JSON.stringify(state));
-    } catch (error) { }
-  }, [key, state]);
 
-  useEffect(() => {
-    const handleStorageChange = () => {
+  // Write synchronously so there's no async gap where another state update
+  // could fire the storage event and read a stale value back.
+  const setLocalState = useCallback((valueOrUpdater) => {
+    setState(prev => {
+      const next = typeof valueOrUpdater === 'function' ? valueOrUpdater(prev) : valueOrUpdater;
       try {
-        const item = window.localStorage.getItem(key);
-        if (item) setState(JSON.parse(item));
-      } catch (e) { }
+        window.localStorage.setItem(key, JSON.stringify(next));
+      } catch (e) {}
+      return next;
+    });
+  }, [key]);
+
+  // Only sync from other tabs — not from our own writes
+  useEffect(() => {
+    const handleStorageChange = (e) => {
+      if (e.key !== key) return;
+      try {
+        if (e.newValue) setState(JSON.parse(e.newValue));
+      } catch (e) {}
     };
     window.addEventListener('storage', handleStorageChange);
     return () => window.removeEventListener('storage', handleStorageChange);
   }, [key]);
 
-  return [state, setState];
+  return [state, setLocalState];
 };
 
 const MaskedField = ({ label, value, theme, fontBody, isSensitive = false }) => {
@@ -782,6 +790,17 @@ export default function NeoApp() {
   // Statement Import State
   const [importReviews, setImportReviews] = useState([]);
   const [updateBankBalance, setUpdateBankBalance] = useState(true);
+  const [editableBankName, setEditableBankName] = useState("");
+
+  useEffect(() => {
+    if (importReviews.length > 0) {
+      setUpdateBankBalance(importReviews[0].suggestBalanceUpdate);
+      // Derive bank name from LLM output or fall back to filename (strip extension)
+      const review = importReviews[0];
+      const fallback = review.fileName.replace(/\.[^.]+$/, '').replace(/[_-]/g, ' ');
+      setEditableBankName(review.bankName || fallback);
+    }
+  }, [importReviews]);
   const [isImporting, setIsImporting] = useState(false);
   const [importErrorMsg, setImportErrorMsg] = useState("");
   const [duplicateWarning, setDuplicateWarning] = useState(false);
@@ -1777,6 +1796,12 @@ export default function NeoApp() {
       const ai = new GoogleGenAI({ apiKey });
       const newReviews = [];
 
+      let allValidTxs = [];
+      let parsedBankNames = [];
+      let latestClosingBalance = null;
+      let latestClosingBalanceDate = '1970-01-01';
+      const fileNames = files.map(f => f.name).join(", ");
+
       for (const file of files) {
         let textContent = "";
         const fileName = file.name.toLowerCase();
@@ -1788,7 +1813,7 @@ export default function NeoApp() {
           const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
           textContent = XLSX.utils.sheet_to_csv(firstSheet);
         } else {
-          continue; // Skip unsupported silently in batch
+          continue; 
         }
 
         const prompt = `You are a financial statement parser.\nParse the following bank statement data into a strict JSON object.\nIMPORTANT: Extract EVERY SINGLE transaction. Do not omit, summarize, or skip any transactions, even if there are hundreds.\nFormat: { "bankName": "Name of Bank", "closingBalance": 15000, "transactions": [{ "name": "Description", "amount": 100, "type": "expense" or "income", "date": "YYYY-MM-DD", "category": "Food/Transport/Etc" }] }\nData:\n${textContent.slice(0, 30000)}`;
@@ -1800,61 +1825,106 @@ export default function NeoApp() {
         if (match) jsonStr = match[0];
         
         let txList = [];
-        let parsedBankName = "";
-        let parsedClosingBalance = null;
+        let fileBankName = "";
+        let fileClosingBalance = null;
         
         try {
           const parsed = JSON.parse(jsonStr);
           txList = Array.isArray(parsed) ? parsed : (parsed.transactions || []);
-          if (parsed.bankName) parsedBankName = parsed.bankName;
-          if (!isNaN(Number(parsed.closingBalance))) parsedClosingBalance = Number(parsed.closingBalance);
+          if (parsed.bankName) fileBankName = parsed.bankName;
+          if (!isNaN(Number(parsed.closingBalance))) fileClosingBalance = Number(parsed.closingBalance);
         } catch (parseErr) {
           console.error(`Could not parse AI response for ${file.name}:`, parseErr.message);
           continue;
         }
 
-        // Strict Deduplication Check against EXISTING transactions
-        const uniqueNewTxs = txList.filter(newTx => {
-          const fallbackDate = new Date().toISOString().split('T')[0];
-          const newDate = newTx.date || fallbackDate;
-          const newType = String(newTx.type || "expense").toLowerCase().includes("income") ? "income" : "expense";
-          const newAmount = Math.abs(Number(newTx.amount) || 0);
-          
-          const isDuplicate = transactions.some(existingTx => 
-            existingTx.date === newDate &&
-            existingTx.type === newType &&
-            Math.abs(Number(existingTx.amount)) === newAmount
-          );
-          return !isDuplicate;
+        if (fileBankName) parsedBankNames.push(fileBankName);
+
+        const todayStr = new Date().toISOString().split('T')[0];
+        let fileMaxDate = '1970-01-01';
+        
+        txList.forEach(tx => {
+            const rawAmt = String(tx.amount || 0).replace(/,/g, '').replace(/[^0-9.-]/g, '');
+            const amt = Math.abs(Number(rawAmt) || 0);
+            
+            let date = tx.date || todayStr;
+            // Normalize DD-MM-YYYY or DD/MM/YYYY to YYYY-MM-DD
+            if (date.match(/^\d{2}[-/]\d{2}[-/]\d{4}$/)) {
+                const parts = date.split(/[-/]/);
+                date = `${parts[2]}-${parts[1]}-${parts[0]}`;
+            }
+
+            if (amt > 0 && date <= todayStr) {
+                const txType = String(tx.type || "expense").toLowerCase().includes("income") ? "income" : "expense";
+                allValidTxs.push({
+                    id: "imp_" + Date.now() + "_" + Math.random().toString(36).substring(7),
+                    name: tx.name || tx.description || "Imported Tx",
+                    desc: tx.name || tx.description || "Imported Tx",
+                    category: tx.category || (txType === "income" ? "Income" : "Other"),
+                    type: txType,
+                    amount: amt,
+                    date: date,
+                    time: new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })
+                });
+                if (date > fileMaxDate) fileMaxDate = date;
+            }
         });
-
-        if (uniqueNewTxs.length > 0) {
-          const finalTxs = uniqueNewTxs.map(t => {
-            const txType = String(t.type || "expense").toLowerCase().includes("income") ? "income" : "expense";
-            const txAmount = Math.abs(Number(t.amount) || 0);
-            return {
-              id: "imp_" + Date.now() + "_" + Math.random().toString(36).substring(7),
-              name: t.name || t.description || "Imported Tx",
-              desc: t.name || t.description || "Imported Tx",
-              category: t.category || (txType === "income" ? "Income" : "Other"),
-              type: txType,
-              amount: txAmount,
-              date: t.date || new Date().toISOString().split('T')[0],
-              time: new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }),
-            };
-          });
-
-          newReviews.push({
-            fileName: file.name,
-            txs: finalTxs,
-            bankName: parsedBankName,
-            closingBalance: parsedClosingBalance
-          });
+        
+        // Track the closing balance from the most recent statement in the batch
+        if (fileClosingBalance !== null && fileMaxDate >= latestClosingBalanceDate) {
+            latestClosingBalance = fileClosingBalance;
+            latestClosingBalanceDate = fileMaxDate;
         }
       }
 
+      // 1. Single Bank Enforcement
+      const cleanName = (name) => name.toLowerCase().replace(/\bbank\b/g, '').trim();
+      const uniqueBanks = new Set(parsedBankNames.map(cleanName).filter(Boolean));
+      if (uniqueBanks.size > 1) {
+          setImportErrorMsg("Please upload statements from only ONE bank at a time. Detected: " + parsedBankNames.join(", "));
+          setIsImporting(false);
+          return;
+      }
+
+      // 2. Intra-batch Deduplication
+      const uniqueNewTxs = [];
+      allValidTxs.forEach(newTx => {
+          const isDuplicate = uniqueNewTxs.some(existingTx => 
+              existingTx.date === newTx.date &&
+              existingTx.type === newTx.type &&
+              Math.abs(Number(existingTx.amount)) === Math.abs(Number(newTx.amount))
+          );
+          if (!isDuplicate) uniqueNewTxs.push(newTx);
+      });
+
+      if (uniqueNewTxs.length > 0) {
+          const todayStr = new Date().toISOString().split('T')[0];
+          let minDate = todayStr;
+          let maxDate = '1970-01-01';
+          uniqueNewTxs.forEach(tx => {
+              if (tx.date < minDate) minDate = tx.date;
+              if (tx.date > maxDate) maxDate = tx.date;
+          });
+          
+          const spanDays = Math.abs(new Date(maxDate) - new Date(minDate)) / (1000 * 60 * 60 * 24);
+          const has6MonthWarning = spanDays > 180;
+          const daysSinceLatest = Math.abs(new Date(todayStr) - new Date(maxDate)) / (1000 * 60 * 60 * 24);
+          const suggestBalanceUpdate = daysSinceLatest <= 7;
+          
+          newReviews.push({
+            fileName: fileNames,
+            txs: uniqueNewTxs,
+            bankName: parsedBankNames[0] || "",
+            closingBalance: latestClosingBalance,
+            hasOverlapWarning: false, // will check strictly on save
+            has6MonthWarning,
+            suggestBalanceUpdate
+          });
+      }
+
       if (newReviews.length === 0) {
-        setDuplicateWarning(true);
+        setImportErrorMsg("Could not extract any valid new transactions. Make sure the file isn't empty, amounts are non-zero, and dates are not in the future.");
+        setIsImporting(false);
       } else {
         setImportReviews(newReviews);
       }
@@ -2254,9 +2324,17 @@ export default function NeoApp() {
                     time: newTime || "",
                   };
                   if (editingTxId) {
-                    setTransactions(t => t.map(x => x.id === editingTxId ? updatedTx : x));
+                    setTransactions(t => {
+                        const newArr = t.map(x => x.id === editingTxId ? updatedTx : x);
+                        newArr.sort((a, b) => new Date(b.date) - new Date(a.date));
+                        return newArr;
+                    });
                   } else {
-                    setTransactions(t => [updatedTx, ...t]);
+                    setTransactions(t => {
+                        const newArr = [updatedTx, ...t];
+                        newArr.sort((a, b) => new Date(b.date) - new Date(a.date));
+                        return newArr;
+                    });
                   }
                   closeForm();
                 }
@@ -2387,7 +2465,7 @@ export default function NeoApp() {
                       <Landmark size={18} strokeWidth={2.5} />
                     </div>
                     <div>
-                      <div style={{ color: theme.textSecondary, fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 4, ...fontBody }}>Bank</div>
+                      <div style={{ color: theme.textSecondary, fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 4, ...fontBody }}>{banks.length > 1 ? "All Banks" : "Bank"}</div>
                       <div style={{ color: theme.textPrimary, fontSize: 24, fontWeight: 700, ...fontDisplay }}>{formatCurrency(bankTotal, baseCurrency)}</div>
                       {banks.length > 0 && <div style={{ color: theme.textSecondary, fontSize: 10, marginTop: 2, ...fontBody }}>{banks.length} account{banks.length !== 1 ? "s" : ""}</div>}
                     </div>
@@ -3726,8 +3804,29 @@ Generate one short, helpful insight about my productivity or finances based ONLY
             <div style={{ fontSize: 18, fontWeight: 700, color: theme.textPrimary, ...fontDisplay }}>Review Imported Transactions</div>
             <div style={{ fontSize: 14, color: theme.textSecondary, ...fontBody }}>
               {currentReview.txs.length} new transactions found in {currentReview.fileName}.
-              {currentReview.bankName && <div style={{ marginTop: 4 }}>Account: <strong>{currentReview.bankName}</strong></div>}
             </div>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              <div style={{ fontSize: 12, color: theme.textSecondary, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5, ...fontBody }}>Bank Account</div>
+              <input
+                value={editableBankName}
+                onChange={(e) => setEditableBankName(e.target.value)}
+                placeholder="Enter bank name..."
+                style={{ padding: "10px 14px", borderRadius: 12, border: "none", background: theme.bg, color: theme.textPrimary, boxShadow: theme.shadowInset, fontSize: 14, ...fontBody, outline: "none" }}
+              />
+            </div>
+
+            {currentReview.hasOverlapWarning && (
+              <div style={{ background: theme.warning + "20", color: theme.warning, padding: 12, borderRadius: 8, fontSize: 13, ...fontBody }}>
+                <strong>⚠️ Warning:</strong> Some imported transaction dates overlap with your existing data. Verify for duplicates.
+              </div>
+            )}
+            
+            {currentReview.has6MonthWarning && (
+              <div style={{ background: theme.accent + "20", color: theme.accent, padding: 12, borderRadius: 8, fontSize: 13, ...fontBody }}>
+                <strong>ℹ️ Note:</strong> This statement spans more than 6 months of data.
+              </div>
+            )}
 
             {currentReview.closingBalance !== null && (
               <div style={{ display: "flex", alignItems: "center", gap: 10, background: theme.bg, padding: 12, borderRadius: 12, boxShadow: theme.shadowInset }}>
@@ -3739,6 +3838,7 @@ Generate one short, helpful insight about my productivity or finances based ONLY
                 />
                 <div style={{ fontSize: 13, color: theme.textPrimary, ...fontBody }}>
                   Update bank balance to <strong>{formatCurrency(currentReview.closingBalance, baseCurrency)}</strong>
+                  {!currentReview.suggestBalanceUpdate && <div style={{ color: theme.warning, fontSize: 11, marginTop: 4 }}>Unchecked by default (statement is old)</div>}
                 </div>
               </div>
             )}
@@ -3761,69 +3861,115 @@ Generate one short, helpful insight about my productivity or finances based ONLY
             </div>
 
             <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
-              <button onClick={() => setImportReviews(prev => prev.slice(1))} style={{ flex: 1, padding: "12px", borderRadius: 12, border: "none", background: theme.bg, color: theme.textSecondary, boxShadow: theme.shadowRaisedSm, fontWeight: 600, ...fontBody, cursor: "pointer" }}>Skip File</button>
               <button onClick={() => {
-                const count = currentReview.txs.length;
-                let targetMethod = 'UPI';
-                const bankName = currentReview.bankName;
-                const closingBalance = currentReview.closingBalance;
-                let bankUpdated = false;
-
-                if (bankName) {
-                    const normalizedBank = bankName.toLowerCase();
-                    const isUpi = normalizedBank.includes('upi') || normalizedBank.includes('phonepe') || normalizedBank.includes('gpay') || normalizedBank.includes('paytm');
-                    
-                    if (isUpi) {
-                        targetMethod = 'UPI';
-                        if (!isNaN(closingBalance) && updateBankBalance) {
-                            setBalances(prev => ({ ...prev, upi: closingBalance }));
-                            bankUpdated = true;
-                        }
+                  try {
+                    if (importReviews.length > 1) {
+                        const nextReview = importReviews[1];
+                        const fallback = nextReview.fileName.replace(/\.[^.]+$/, '').replace(/[_-]/g, ' ');
+                        setEditableBankName(nextReview.bankName || fallback);
+                        setUpdateBankBalance(nextReview.suggestBalanceUpdate);
                     } else {
-                        const existingBank = banks.find(b => b.bankName.toLowerCase().includes(normalizedBank) || normalizedBank.includes(b.bankName.toLowerCase()));
-                        if (existingBank) {
-                            targetMethod = String(existingBank.id);
-                            if (!isNaN(closingBalance) && updateBankBalance) {
-                                setBanks(prev => prev.map(b => String(b.id) === targetMethod ? { ...b, balance: closingBalance } : b));
-                                bankUpdated = true;
-                            }
-                        } else {
-                            targetMethod = Date.now().toString();
-                            setBanks(prev => [...prev, { id: targetMethod, bankName: bankName, balance: (!isNaN(closingBalance) && updateBankBalance) ? closingBalance : 0, icon: "🏛️" }]);
-                            bankUpdated = true;
-                        }
+                        setEditableBankName("");
                     }
-                } else if (banks.length > 0) {
-                    targetMethod = String(banks[0].id);
+                    setImportReviews(prev => prev.slice(1));
+                  } catch (err) {
+                    setToastMessage("Error skipping file: " + err.message);
+                  }
+              }} style={{ flex: 1, padding: "12px", borderRadius: 12, border: "none", background: theme.bg, color: theme.textSecondary, boxShadow: theme.shadowRaisedSm, fontWeight: 600, ...fontBody, cursor: "pointer" }}>Skip File</button>
+              
+              <button onClick={() => {
+                try {
+                const count = currentReview.txs.length;
+                let targetMethod = null;
+                const bankName = editableBankName.trim();
+                
+                if (!bankName) {
+                    setToastMessage("Please enter a valid Bank Name to save these transactions.");
+                    return;
                 }
 
-                const txsToSave = currentReview.txs.map(tx => ({ ...tx, method: targetMethod }));
-                setTransactions(prev => [...txsToSave, ...prev]);
+                const closingBalance = currentReview.closingBalance;
+
+                const normalizedBank = bankName.toLowerCase();
+                const isUpi = normalizedBank.includes('upi') || normalizedBank.includes('phonepe') || normalizedBank.includes('gpay') || normalizedBank.includes('paytm');
                 
-                // Record snapshot for undo (valid 24h)
+                if (isUpi) {
+                    targetMethod = 'UPI';
+                    if (!isNaN(closingBalance) && updateBankBalance) {
+                        setBalances(prev => ({ ...prev, upi: closingBalance }));
+                    }
+                } else if (bankName) {
+                    const cleanName = (name) => (name || "").toLowerCase().replace(/\bbank\b/g, '').trim();
+                    const existingBank = banks.find(b => {
+                        const bName = cleanName(b.bankName);
+                        const nName = cleanName(normalizedBank);
+                        return bName && nName && bName === nName;
+                    });
+                    
+                    if (existingBank) {
+                        targetMethod = String(existingBank.id);
+                        if (!isNaN(closingBalance) && updateBankBalance) {
+                            setBanks(prev => prev.map(b => String(b.id) === targetMethod ? { ...b, balance: closingBalance } : b));
+                        }
+                    } else {
+                        // Always create new bank — never silently assign to existing
+                        const newBankId = Date.now();
+                        targetMethod = String(newBankId);
+                        setBanks(prev => [...prev, { id: newBankId, bankName: bankName, balance: (!isNaN(closingBalance) && updateBankBalance) ? closingBalance : 0, icon: "🏛️" }]);
+                    }
+                } else {
+                    // Truly no name, last resort: first bank or UPI
+                    targetMethod = banks.length > 0 ? String(banks[0].id) : 'UPI';
+                }
+
+                const existingBankTxs = transactions.filter(t => String(t.method) === targetMethod);
+                const txsToSave = [];
+                currentReview.txs.forEach(newTx => {
+                    const isDuplicate = existingBankTxs.some(existingTx => 
+                        existingTx.date === newTx.date &&
+                        existingTx.type === newTx.type &&
+                        Math.abs(Number(existingTx.amount)) === Math.abs(Number(newTx.amount))
+                    );
+                    if (!isDuplicate) {
+                        txsToSave.push({ ...newTx, method: targetMethod });
+                    }
+                });
+
+                if (txsToSave.length > 0) {
+                    setTransactions(prev => {
+                        const newArr = [...txsToSave, ...prev];
+                        newArr.sort((a, b) => new Date(b.date) - new Date(a.date));
+                        return newArr;
+                    });
+                }
+                
+                // Record snapshot for undo (valid 24h). We do not record balance deltas anymore for statement imports.
                 setLastImportSnapshot({
                   ids: txsToSave.map(t => t.id),
                   method: targetMethod,
-                  balanceDelta: updateBankBalance ? 0 : txsToSave.reduce((sum, tx) => sum + (tx.type === 'income' ? tx.amount : -tx.amount), 0),
+                  balanceDelta: 0,
                   timestamp: Date.now(),
                   count: txsToSave.length,
                 });
-                
-                // If the user opted not to use the closing balance (unchecked or missing), we apply the deltas manually
-                if (!bankUpdated && updateBankBalance) {
-                   // wait, if updateBankBalance is true but bankUpdated is false (e.g. no closing balance in statement), we apply deltas
-                   txsToSave.forEach(tx => {
-                     const delta = tx.type === 'income' ? tx.amount : -tx.amount;
-                     updateBalanceForMethod(tx.method, delta);
-                   });
-                } else if (!updateBankBalance) {
-                   // If user explicitly unchecks it (e.g. historical data), they don't want the bank balance touched at all.
-                }
 
-                setImportedCount(count);
+                setImportedCount(txsToSave.length);
+                
+                if (importReviews.length > 1) {
+                    const nextReview = importReviews[1];
+                    const fallback = nextReview.fileName.replace(/\.[^.]+$/, '').replace(/[_-]/g, ' ');
+                    setEditableBankName(nextReview.bankName || fallback);
+                    setUpdateBankBalance(nextReview.suggestBalanceUpdate);
+                } else {
+                    setEditableBankName("");
+                }
+                
                 setImportReviews(prev => prev.slice(1));
+                setToastMessage(`Saved ${txsToSave.length} transactions to: ${bankName || 'Default Bank'}`);
                 setShowImportCelebration(true);
                 setTimeout(() => setShowImportCelebration(false), 4000);
+                } catch (err) {
+                    setToastMessage("Error saving: " + err.message);
+                }
               }} style={{ flex: 1, padding: "12px", borderRadius: 12, border: "none", background: theme.accent, color: "#fff", fontWeight: 700, ...fontBody, cursor: "pointer" }}>
                 {importReviews.length > 1 ? "Save & Next" : "Save All"}
               </button>

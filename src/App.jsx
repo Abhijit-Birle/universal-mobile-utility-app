@@ -785,7 +785,7 @@ export default function NeoApp() {
   const [importErrorMsg, setImportErrorMsg] = useState("");
   const [duplicateWarning, setDuplicateWarning] = useState(false);
   const [showImportConsent, setShowImportConsent] = useState(false);
-  const [pendingImportFile, setPendingImportFile] = useState(null);
+  const [pendingImportFiles, setPendingImportFiles] = useState([]);
   const [showImportCelebration, setShowImportCelebration] = useState(false);
   const [importedCount, setImportedCount] = useState(0);
   const touchData = useRef({ x: 0, y: 0, active: false });
@@ -1956,16 +1956,15 @@ export default function NeoApp() {
     dayFiltered.sort((a, b) => new Date(b.date) - new Date(a.date));
 
     const handleImportStatement = (e) => {
-      const file = e.target.files[0];
-      if (!file) return;
+      const files = Array.from(e.target.files || []);
+      if (!files.length) return;
       e.target.value = '';
-      console.log("File selected for import:", file.name);
       if (!apiKey) {
         setShowKeyModal(true);
-        setToastMessage("\u26a0\ufe0f Please set your Gemini API key first.");
+        setToastMessage("⚠️ Please set your Gemini API key first.");
         return;
       }
-      setPendingImportFile(file);
+      setPendingImportFiles(files);
       setShowImportConsent(true);
     };
 
@@ -2420,7 +2419,7 @@ export default function NeoApp() {
               </div>
               <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
                 <NeoSurface style={{ position: "relative", display: "flex", alignItems: "center", justifyContent: "center", width: 44, height: 44, borderRadius: 16, cursor: isImporting ? "wait" : "pointer", color: theme.accent, overflow: "hidden" }}>
-                  {!isImporting && <input type="file" accept=".csv,.txt,.xls,.xlsx" onChange={handleImportStatement} style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", opacity: 0, cursor: "pointer", zIndex: 10 }} title="Import Statement" />}
+                  {!isImporting && <input type="file" accept=".csv,.txt,.xls,.xlsx" multiple onChange={handleImportStatement} style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", opacity: 0, cursor: "pointer", zIndex: 10 }} title="Import Statement" />}
                   {isImporting ? (
                     <div style={{ position: "relative", zIndex: 1, width: 24, height: 24, display: "flex", alignItems: "center", justifyContent: "center", borderRadius: "50%", overflow: "hidden" }}>
                       <Strands
@@ -3784,7 +3783,10 @@ Generate one short, helpful insight about my productivity or finances based ONLY
               <div style={{ fontSize: 17, fontWeight: 700, color: theme.textPrimary, ...fontDisplay }}>Privacy Notice</div>
             </div>
             <div style={{ fontSize: 13.5, color: theme.textSecondary, lineHeight: 1.65, ...fontBody }}>
-              Your statement data (<strong style={{ color: theme.textPrimary }}>{pendingImportFile?.name}</strong>) will be sent to <strong style={{ color: theme.textPrimary }}>Google Gemini AI</strong> for parsing.
+              {pendingImportFiles.length === 1
+                ? <>Your statement (<strong style={{ color: theme.textPrimary }}>{pendingImportFiles[0]?.name}</strong>)</>
+                : <><strong style={{ color: theme.textPrimary }}>{pendingImportFiles.length} files</strong> ({pendingImportFiles.map(f => f.name).join(", ")})</>
+              } will be sent to <strong style={{ color: theme.textPrimary }}>Google Gemini AI</strong> for parsing.
             </div>
             <div style={{ padding: "12px 14px", borderRadius: 12, background: "#f59e0b15", border: "1px solid #f59e0b55", fontSize: 13, color: "#b45309", lineHeight: 1.6, ...fontBody }}>
               ⚠️ <strong>Avoid uploading files with:</strong>
@@ -3799,8 +3801,14 @@ Generate one short, helpful insight about my productivity or finances based ONLY
               Per Google's API policy, data sent via API is <strong>not used to train models</strong>.
             </div>
             <div style={{ display: "flex", gap: 10, marginTop: 4 }}>
-              <button onClick={() => { setShowImportConsent(false); setPendingImportFile(null); }} style={{ flex: 1, padding: "12px", borderRadius: 12, border: "none", background: theme.bg, color: theme.textSecondary, boxShadow: theme.shadowRaisedSm, fontWeight: 600, ...fontBody, cursor: "pointer" }}>Cancel</button>
-              <button onClick={() => processImportFile(pendingImportFile)} style={{ flex: 1, padding: "12px", borderRadius: 12, border: "none", background: theme.accent, color: "#fff", fontWeight: 700, ...fontBody, cursor: "pointer" }}>Proceed →</button>
+              <button onClick={() => { setShowImportConsent(false); setPendingImportFiles([]); }} style={{ flex: 1, padding: "12px", borderRadius: 12, border: "none", background: theme.bg, color: theme.textSecondary, boxShadow: theme.shadowRaisedSm, fontWeight: 600, ...fontBody, cursor: "pointer" }}>Cancel</button>
+              <button onClick={async () => {
+                setShowImportConsent(false);
+                for (const file of pendingImportFiles) {
+                  await processImportFile(file);
+                }
+                setPendingImportFiles([]);
+              }} style={{ flex: 1, padding: "12px", borderRadius: 12, border: "none", background: theme.accent, color: "#fff", fontWeight: 700, ...fontBody, cursor: "pointer" }}>Proceed →</button>
             </div>
           </NeoSurface>
         </div>

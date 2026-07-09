@@ -562,16 +562,24 @@ export default function NeoApp() {
   }, [customCategories, setCustomCategories]);
 
   const [customCategoryIcons, setCustomCategoryIcons] = useLocalStorage("neo_custom_category_icons", {});
+  const [customIncomeCategories, setCustomIncomeCategories] = useLocalStorage("neo_custom_income_categories", []);
   const ALL_EXPENSE_CATEGORIES = [...EXPENSE_CATEGORIES, ...customCategories];
+  const ALL_INCOME_CATEGORIES = [...INCOME_CATEGORIES, ...customIncomeCategories];
   const { todos, incrementPomodoro, toggleDone, updateTodo } = useTodos();
   const [categoryBudgets, setCategoryBudgets] = useLocalStorage("neo_categoryBudgets", {});
-  const [balances, setBalances] = useLocalStorage("neo_balances", { bank: 14250.00, upi: 340.50 });
-  const [upcomingBills, setUpcomingBills] = useLocalStorage("neo_upcomingBills", [
-    { id: 1, name: "Netflix", amount: 649, daysLeft: 2 },
-    { id: 2, name: "Electricity Bill", amount: 1450, daysLeft: 5 },
-    { id: 3, name: "Rent", amount: 14000, daysLeft: 9 },
-  ]);
+  const [balances, setBalances] = useLocalStorage("neo_balances", { bank: 0, upi: 0 });
+  const [upcomingBills, setUpcomingBills] = useLocalStorage("neo_upcomingBills", []);
 
+  useEffect(() => {
+    // Migration to clear dummy bills for existing users
+    if (upcomingBills.length === 3 && upcomingBills[0].name === "Netflix" && upcomingBills[1].name === "Electricity Bill" && upcomingBills[2].name === "Rent") {
+      setUpcomingBills([]);
+    }
+    // Migration to clear dummy balances for existing users
+    if (balances.bank === 14250.00 && balances.upi === 340.50) {
+      setBalances({ bank: 0, upi: 0 });
+    }
+  }, []);
   // Timer States
   const [showDailyGoalModal, setShowDailyGoalModal] = useState(false);
   const [tempDailyGoal, setTempDailyGoal] = useState("");
@@ -619,6 +627,7 @@ export default function NeoApp() {
   const [showCalendarWidget, setShowCalendarWidget] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState("");
   const [newCategoryIcon, setNewCategoryIcon] = useState("Box");
+  const [newCategoryType, setNewCategoryType] = useState("expense");
   const ICON_OPTIONS = [
     "Box", "Tag", "ShoppingCart", "Car", "HeartPulse", "BookOpen", "Film", "Gift", 
     "Smartphone", "Camera", "Music2", "Dumbbell", "Utensils", "CreditCard", "Target", "Award",
@@ -1872,7 +1881,9 @@ export default function NeoApp() {
     const targetMonthStr = String(targetDate.getMonth() + 1).padStart(2, '0');
 
     const currentMonthTx = transactions.filter(t => {
-      const [y, m] = t.date.split("-");
+      // Normalize legacy "Today" date string
+      const dateStr = (!t.date || t.date === "Today") ? getLocalToday() : t.date;
+      const [y, m] = dateStr.split("-");
       return y === targetYearStr && m === targetMonthStr;
     });
 
@@ -2155,7 +2166,7 @@ export default function NeoApp() {
                 >
                   {/* ponytail: min change, grid 4 columns, smaller padding */}
                   <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 8, marginTop: 12 }}>
-                    {(newType === "expense" ? ALL_EXPENSE_CATEGORIES : INCOME_CATEGORIES).map(c => (
+                    {(newType === "expense" ? ALL_EXPENSE_CATEGORIES : ALL_INCOME_CATEGORIES).map(c => (
                       <div
                         key={c}
                         onClick={() => setNewCat(c)}
@@ -3491,6 +3502,28 @@ Generate one short, helpful insight about my productivity or finances based ONLY
               onChange={(e) => setNewCategoryName(e.target.value)} 
             />
 
+            <div style={{ fontSize: 11, fontWeight: 700, color: theme.textSecondary, marginBottom: 8, marginTop: 16 }}>CATEGORY TYPE</div>
+            <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
+              {["expense", "income"].map(type => (
+                <button
+                  key={type}
+                  onClick={() => setNewCategoryType(type)}
+                  style={{
+                    flex: 1, padding: "10px", borderRadius: 12,
+                    background: newCategoryType === type ? theme.accent : "transparent",
+                    color: newCategoryType === type ? "#fff" : theme.textSecondary,
+                    border: newCategoryType === type ? `1px solid ${theme.border}` : "1px solid transparent",
+                    boxShadow: newCategoryType === type ? theme.shadowInset : "none",
+                    cursor: "pointer",
+                    fontWeight: 600, fontSize: 13, textTransform: "capitalize", ...fontBody,
+                    transition: "all 0.2s"
+                  }}
+                >
+                  {type}
+                </button>
+              ))}
+            </div>
+
             <div style={{ fontSize: 11, fontWeight: 700, color: theme.textSecondary, marginBottom: 8, marginTop: 16 }}>SELECT ICON</div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(8, 1fr)", gap: 4, marginBottom: 16 }}>
               {ICON_OPTIONS.map(iconKey => (
@@ -3516,14 +3549,22 @@ Generate one short, helpful insight about my productivity or finances based ONLY
               <PrimaryButton 
                 label="Save Category" 
                 onClick={() => {
-                  if (newCategoryName.trim() && !ALL_EXPENSE_CATEGORIES.includes(newCategoryName.trim())) {
-                    setCustomCategories(prev => [...prev, newCategoryName.trim()]);
-                    setCustomCategoryIcons(prev => ({...prev, [newCategoryName.trim()]: newCategoryIcon}));
-                    setNewCat(newCategoryName.trim()); // Auto-select it
+                  const catName = newCategoryName.trim();
+                  if (catName) {
+                    if (newCategoryType === "income" && !ALL_INCOME_CATEGORIES.includes(catName)) {
+                      setCustomIncomeCategories(prev => [...prev, catName]);
+                      setCustomCategoryIcons(prev => ({...prev, [catName]: newCategoryIcon}));
+                      setNewCat(catName); // Auto-select it
+                    } else if (newCategoryType === "expense" && !ALL_EXPENSE_CATEGORIES.includes(catName)) {
+                      setCustomCategories(prev => [...prev, catName]);
+                      setCustomCategoryIcons(prev => ({...prev, [catName]: newCategoryIcon}));
+                      setNewCat(catName); // Auto-select it
+                    }
                   }
                   setShowCategoryForm(false);
                   setNewCategoryName("");
                   setNewCategoryIcon("Box");
+                  setNewCategoryType("expense");
                 }}
               />
             </div>

@@ -788,6 +788,7 @@ export default function NeoApp() {
   const [pendingImportFiles, setPendingImportFiles] = useState([]);
   const [showImportCelebration, setShowImportCelebration] = useState(false);
   const [importedCount, setImportedCount] = useState(0);
+  const [lastImportSnapshot, setLastImportSnapshot] = useLocalStorage("neo_lastImportSnapshot", null);
   const touchData = useRef({ x: 0, y: 0, active: false });
 
   // Handle Hardware Back Button (Android)
@@ -3354,6 +3355,30 @@ Generate one short, helpful insight about my productivity or finances based ONLY
             Add this widget from your phone's home screen editor to see your live timer and top tasks at a glance.
           </div>
         </NeoSurface>
+
+        {/* Undo Last Import */}
+        {lastImportSnapshot && Date.now() - lastImportSnapshot.timestamp < 86400000 && (
+          <div style={{ background: theme.bg, borderRadius: 16, padding: 16, marginTop: 12, boxShadow: theme.shadowRaisedSm, border: `1px solid ${theme.border}` }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: theme.textPrimary, ...fontDisplay, marginBottom: 6 }}>↩️ Undo Last Import</div>
+            <div style={{ fontSize: 12, color: theme.textSecondary, ...fontBody, marginBottom: 12 }}>
+              {lastImportSnapshot.count} transactions imported. You can undo this for{" "}
+              <strong>{Math.ceil((86400000 - (Date.now() - lastImportSnapshot.timestamp)) / 3600000)}h</strong> more.
+            </div>
+            <button
+              onClick={() => {
+                setTransactions(prev => prev.filter(t => !lastImportSnapshot.ids.includes(t.id)));
+                updateBalanceForMethod(lastImportSnapshot.method, -lastImportSnapshot.balanceDelta);
+                setLastImportSnapshot(null);
+                setToastMessage("↩️ Import undone successfully");
+                setTimeout(() => setToastMessage(""), 3000);
+                setShowSettings(false);
+              }}
+              style={{ width: "100%", padding: "10px", borderRadius: 12, border: "none", background: theme.danger + "22", color: theme.danger, fontWeight: 700, fontSize: 13, ...fontBody, cursor: "pointer" }}
+            >
+              Undo Import
+            </button>
+          </div>
+        )}
       </div>
     );
   }
@@ -3746,6 +3771,15 @@ Generate one short, helpful insight about my productivity or finances based ONLY
                 const txsToSave = importReviewData.txs.map(tx => ({ ...tx, method: targetMethod }));
                 setTransactions(prev => [...txsToSave, ...prev]);
                 
+                // Record snapshot for undo (valid 24h)
+                setLastImportSnapshot({
+                  ids: txsToSave.map(t => t.id),
+                  method: targetMethod,
+                  balanceDelta: txsToSave.reduce((sum, tx) => sum + (tx.type === 'income' ? tx.amount : -tx.amount), 0),
+                  timestamp: Date.now(),
+                  count: txsToSave.length,
+                });
+                
                 // If we didn't extract a closing balance to explicitly set the bank's balance, we apply the deltas manually
                 if (!bankUpdated) {
                    txsToSave.forEach(tx => {
@@ -3825,9 +3859,26 @@ Generate one short, helpful insight about my productivity or finances based ONLY
               transactions added to your account
             </div>
             <div style={{ fontSize: 13, color: theme.textSecondary, ...fontBody }}>Your bank balance has been updated automatically.</div>
-            <button onClick={() => setShowImportCelebration(false)} style={{ marginTop: 8, padding: "12px 32px", borderRadius: 30, border: "none", background: theme.accent, color: "#fff", fontWeight: 700, fontSize: 15, ...fontBody, cursor: "pointer" }}>
-              Awesome! 🚀
-            </button>
+            <div style={{ fontSize: 12, color: theme.textSecondary, ...fontBody, background: theme.bg, borderRadius: 10, padding: "8px 12px", boxShadow: theme.shadowInset }}>
+              ↩️ You can undo this import within <strong>24 hours</strong>
+            </div>
+            <div style={{ display: "flex", gap: 10, width: "100%", marginTop: 4 }}>
+              <button onClick={() => {
+                if (lastImportSnapshot && Date.now() - lastImportSnapshot.timestamp < 86400000) {
+                  setTransactions(prev => prev.filter(t => !lastImportSnapshot.ids.includes(t.id)));
+                  updateBalanceForMethod(lastImportSnapshot.method, -lastImportSnapshot.balanceDelta);
+                  setLastImportSnapshot(null);
+                  setToastMessage("↩️ Import undone successfully");
+                  setTimeout(() => setToastMessage(""), 3000);
+                }
+                setShowImportCelebration(false);
+              }} style={{ flex: 1, padding: "12px", borderRadius: 30, border: `1px solid ${theme.border}`, background: "transparent", color: theme.textSecondary, fontWeight: 600, fontSize: 13, ...fontBody, cursor: "pointer" }}>
+                Undo Import
+              </button>
+              <button onClick={() => setShowImportCelebration(false)} style={{ flex: 1, padding: "12px", borderRadius: 30, border: "none", background: theme.accent, color: "#fff", fontWeight: 700, fontSize: 14, ...fontBody, cursor: "pointer" }}>
+                Awesome! 🚀
+              </button>
+            </div>
           </NeoSurface>
         </div>
       )}

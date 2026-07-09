@@ -780,7 +780,7 @@ export default function NeoApp() {
   const [customCategoryRules, setCustomCategoryRules] = useLocalStorage("neo_custom_category_rules", []);
   
   // Statement Import State
-  const [importReviewData, setImportReviewData] = useState(null);
+  const [importReviews, setImportReviews] = useState([]);
   const [updateBankBalance, setUpdateBankBalance] = useState(true);
   const [isImporting, setIsImporting] = useState(false);
   const [importErrorMsg, setImportErrorMsg] = useState("");
@@ -1772,10 +1772,10 @@ export default function NeoApp() {
     setShowImportConsent(false);
     setIsImporting(true);
     setImportErrorMsg("");
-    setToastMessage(`Processing ${files.length} file(s) into one batch...`);
+    setToastMessage(`Processing ${files.length} file(s)...`);
     try {
       const ai = new GoogleGenAI({ apiKey });
-      let combinedText = "";
+      const newReviews = [];
 
       for (const file of files) {
         let textContent = "";
@@ -1790,86 +1790,75 @@ export default function NeoApp() {
         } else {
           continue; // Skip unsupported silently in batch
         }
-        combinedText += `\n--- STATEMENT DATA FROM ${file.name} ---\n${textContent}\n`;
-      }
 
-      if (!combinedText.trim()) {
-         setToastMessage("No valid statement data found.");
-         setIsImporting(false);
-         return;
-      }
-
-      const prompt = `You are a financial statement parser.\nParse the following bank statement data into a strict JSON object.\nIMPORTANT: Extract EVERY SINGLE transaction. Do not omit, summarize, or skip any transactions, even if there are hundreds.\nIf there are multiple files, combine all their transactions into the single array.\nFormat: { "bankName": "Name of Bank", "closingBalance": 15000, "transactions": [{ "name": "Description", "amount": 100, "type": "expense" or "income", "date": "YYYY-MM-DD", "category": "Food/Transport/Etc" }] }\nData:\n${combinedText.slice(0, 150000)}`;
-      
-      const response = await ai.models.generateContent({ model: 'gemini-2.5-flash', contents: prompt });
-      const text = (typeof response.text === 'function' ? response.text() : response.text) || "";
-      let jsonStr = text;
-      const match = text.match(/\{.*\}/s);
-      if (match) jsonStr = match[0];
-      
-      let allTxs = [];
-      let latestClosingBalance = null;
-      let aggregatedBankName = "";
-      
-      try {
-        const parsed = JSON.parse(jsonStr);
-        allTxs = Array.isArray(parsed) ? parsed : (parsed.transactions || []);
-        if (parsed.bankName) aggregatedBankName = parsed.bankName;
-        if (!isNaN(Number(parsed.closingBalance))) latestClosingBalance = Number(parsed.closingBalance);
-      } catch (parseErr) {
-        throw new Error("Could not parse AI response: " + parseErr.message);
-      }
-      
-      // Strict Deduplication Check against EXISTING transactions
-      const uniqueNewTxs = allTxs.filter(newTx => {
-        const fallbackDate = new Date().toISOString().split('T')[0];
-        const newDate = newTx.date || fallbackDate;
-        const newType = String(newTx.type || "expense").toLowerCase().includes("income") ? "income" : "expense";
-        const newAmount = Math.abs(Number(newTx.amount) || 0);
+        const prompt = `You are a financial statement parser.\nParse the following bank statement data into a strict JSON object.\nIMPORTANT: Extract EVERY SINGLE transaction. Do not omit, summarize, or skip any transactions, even if there are hundreds.\nFormat: { "bankName": "Name of Bank", "closingBalance": 15000, "transactions": [{ "name": "Description", "amount": 100, "type": "expense" or "income", "date": "YYYY-MM-DD", "category": "Food/Transport/Etc" }] }\nData:\n${textContent.slice(0, 30000)}`;
         
-        const isDuplicate = transactions.some(existingTx => 
-          existingTx.date === newDate &&
-          existingTx.type === newType &&
-          Math.abs(Number(existingTx.amount)) === newAmount
-        );
-        return !isDuplicate;
-      });
+        const response = await ai.models.generateContent({ model: 'gemini-2.5-flash', contents: prompt });
+        const text = (typeof response.text === 'function' ? response.text() : response.text) || "";
+        let jsonStr = text;
+        const match = text.match(/\{.*\}/s);
+        if (match) jsonStr = match[0];
+        
+        let txList = [];
+        let parsedBankName = "";
+        let parsedClosingBalance = null;
+        
+        try {
+          const parsed = JSON.parse(jsonStr);
+          txList = Array.isArray(parsed) ? parsed : (parsed.transactions || []);
+          if (parsed.bankName) parsedBankName = parsed.bankName;
+          if (!isNaN(Number(parsed.closingBalance))) parsedClosingBalance = Number(parsed.closingBalance);
+        } catch (parseErr) {
+          console.error(`Could not parse AI response for ${file.name}:`, parseErr.message);
+          continue;
+        }
 
-      // Internal Deduplication Check (within the batch itself)
-      const finalTxs = [];
-      uniqueNewTxs.forEach(newTx => {
-        const newDate = newTx.date || new Date().toISOString().split('T')[0];
-        const newType = String(newTx.type || "expense").toLowerCase().includes("income") ? "income" : "expense";
-        const newAmount = Math.abs(Number(newTx.amount) || 0);
+        // Strict Deduplication Check against EXISTING transactions
+        const uniqueNewTxs = txList.filter(newTx => {
+          const fallbackDate = new Date().toISOString().split('T')[0];
+          const newDate = newTx.date || fallbackDate;
+          const newType = String(newTx.type || "expense").toLowerCase().includes("income") ? "income" : "expense";
+          const newAmount = Math.abs(Number(newTx.amount) || 0);
+          
+          const isDuplicate = transactions.some(existingTx => 
+            existingTx.date === newDate &&
+            existingTx.type === newType &&
+            Math.abs(Number(existingTx.amount)) === newAmount
+          );
+          return !isDuplicate;
+        });
 
-        const alreadyInBatch = finalTxs.some(t => t.date === newDate && t.type === newType && t.amount === newAmount);
-        if (!alreadyInBatch) finalTxs.push({ ...newTx, date: newDate, type: newType, amount: newAmount });
-      });
+        if (uniqueNewTxs.length > 0) {
+          const finalTxs = uniqueNewTxs.map(t => {
+            const txType = String(t.type || "expense").toLowerCase().includes("income") ? "income" : "expense";
+            const txAmount = Math.abs(Number(t.amount) || 0);
+            return {
+              id: "imp_" + Date.now() + "_" + Math.random().toString(36).substring(7),
+              name: t.name || t.description || "Imported Tx",
+              desc: t.name || t.description || "Imported Tx",
+              category: t.category || (txType === "income" ? "Income" : "Other"),
+              type: txType,
+              amount: txAmount,
+              date: t.date || new Date().toISOString().split('T')[0],
+              time: new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }),
+            };
+          });
 
-      if (!finalTxs || finalTxs.length === 0) {
-        setDuplicateWarning(true);
-        setIsImporting(false);
-        return;
+          newReviews.push({
+            fileName: file.name,
+            txs: finalTxs,
+            bankName: parsedBankName,
+            closingBalance: parsedClosingBalance
+          });
+        }
       }
 
-      const txs = finalTxs.map(t => {
-        return {
-          id: "imp_" + Date.now() + "_" + Math.random().toString(36).substring(7),
-          name: t.name || t.description || "Imported Tx",
-          desc: t.name || t.description || "Imported Tx",
-          category: t.category || (t.type === "income" ? "Income" : "Other"),
-          type: t.type,
-          amount: t.amount,
-          date: t.date,
-          time: new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }),
-        };
-      });
+      if (newReviews.length === 0) {
+        setDuplicateWarning(true);
+      } else {
+        setImportReviews(newReviews);
+      }
 
-      setImportReviewData({
-        txs,
-        bankName: aggregatedBankName,
-        closingBalance: latestClosingBalance
-      });
     } catch (err) {
       console.error("Import error:", err);
       const msg = "Import failed: " + (err.message || String(err));
@@ -3729,16 +3718,18 @@ Generate one short, helpful insight about my productivity or finances based ONLY
       )}
 
       {/* IMPORT REVIEW MODAL */}
-      {importReviewData && (
+      {importReviews.length > 0 && (() => {
+        const currentReview = importReviews[0];
+        return (
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 90, display: "flex", alignItems: "center", justifyContent: "center" }}>
           <NeoSurface style={{ width: '90%', maxWidth: 400, maxHeight: '80vh', padding: 24, display: "flex", flexDirection: "column", gap: 16, overflowY: "auto" }}>
             <div style={{ fontSize: 18, fontWeight: 700, color: theme.textPrimary, ...fontDisplay }}>Review Imported Transactions</div>
             <div style={{ fontSize: 14, color: theme.textSecondary, ...fontBody }}>
-              {importReviewData.txs.length} new transactions found.
-              {importReviewData.bankName && <div style={{ marginTop: 4 }}>Account: <strong>{importReviewData.bankName}</strong></div>}
+              {currentReview.txs.length} new transactions found in {currentReview.fileName}.
+              {currentReview.bankName && <div style={{ marginTop: 4 }}>Account: <strong>{currentReview.bankName}</strong></div>}
             </div>
 
-            {importReviewData.closingBalance !== null && (
+            {currentReview.closingBalance !== null && (
               <div style={{ display: "flex", alignItems: "center", gap: 10, background: theme.bg, padding: 12, borderRadius: 12, boxShadow: theme.shadowInset }}>
                 <input 
                   type="checkbox" 
@@ -3747,13 +3738,13 @@ Generate one short, helpful insight about my productivity or finances based ONLY
                   style={{ width: 18, height: 18, accentColor: theme.accent, cursor: "pointer" }}
                 />
                 <div style={{ fontSize: 13, color: theme.textPrimary, ...fontBody }}>
-                  Update bank balance to <strong>{formatCurrency(importReviewData.closingBalance, baseCurrency)}</strong>
+                  Update bank balance to <strong>{formatCurrency(currentReview.closingBalance, baseCurrency)}</strong>
                 </div>
               </div>
             )}
             
             <div style={{ display: "flex", flexDirection: "column", gap: 8, maxHeight: 300, overflowY: "auto" }}>
-              {importReviewData.txs.map((tx, idx) => (
+              {currentReview.txs.map((tx, idx) => (
                 <div key={idx} style={{ padding: 12, borderRadius: 12, background: theme.bg, boxShadow: theme.shadowInset }}>
                   <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
                     <span style={{ fontWeight: 600, fontSize: 14, color: theme.textPrimary, ...fontBody }}>{tx.name}</span>
@@ -3770,12 +3761,12 @@ Generate one short, helpful insight about my productivity or finances based ONLY
             </div>
 
             <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
-              <button onClick={() => setImportReviewData(null)} style={{ flex: 1, padding: "12px", borderRadius: 12, border: "none", background: theme.bg, color: theme.textSecondary, boxShadow: theme.shadowRaisedSm, fontWeight: 600, ...fontBody, cursor: "pointer" }}>Cancel</button>
+              <button onClick={() => setImportReviews(prev => prev.slice(1))} style={{ flex: 1, padding: "12px", borderRadius: 12, border: "none", background: theme.bg, color: theme.textSecondary, boxShadow: theme.shadowRaisedSm, fontWeight: 600, ...fontBody, cursor: "pointer" }}>Skip File</button>
               <button onClick={() => {
-                const count = importReviewData.txs.length;
+                const count = currentReview.txs.length;
                 let targetMethod = 'UPI';
-                const bankName = importReviewData.bankName;
-                const closingBalance = importReviewData.closingBalance;
+                const bankName = currentReview.bankName;
+                const closingBalance = currentReview.closingBalance;
                 let bankUpdated = false;
 
                 if (bankName) {
@@ -3806,7 +3797,7 @@ Generate one short, helpful insight about my productivity or finances based ONLY
                     targetMethod = String(banks[0].id);
                 }
 
-                const txsToSave = importReviewData.txs.map(tx => ({ ...tx, method: targetMethod }));
+                const txsToSave = currentReview.txs.map(tx => ({ ...tx, method: targetMethod }));
                 setTransactions(prev => [...txsToSave, ...prev]);
                 
                 // Record snapshot for undo (valid 24h)
@@ -3827,18 +3818,20 @@ Generate one short, helpful insight about my productivity or finances based ONLY
                    });
                 } else if (!updateBankBalance) {
                    // If user explicitly unchecks it (e.g. historical data), they don't want the bank balance touched at all.
-                   // So we do NOTHING to the balance. It remains as is.
                 }
 
                 setImportedCount(count);
-                setImportReviewData(null);
+                setImportReviews(prev => prev.slice(1));
                 setShowImportCelebration(true);
                 setTimeout(() => setShowImportCelebration(false), 4000);
-              }} style={{ flex: 1, padding: "12px", borderRadius: 12, border: "none", background: theme.accent, color: "#fff", fontWeight: 700, ...fontBody, cursor: "pointer" }}>Save All ✓</button>
+              }} style={{ flex: 1, padding: "12px", borderRadius: 12, border: "none", background: theme.accent, color: "#fff", fontWeight: 700, ...fontBody, cursor: "pointer" }}>
+                {importReviews.length > 1 ? "Save & Next" : "Save All"}
+              </button>
             </div>
           </NeoSurface>
         </div>
-      )}
+        );
+      })()}
 
       {/* TOAST NOTIFICATION */}
       {toastMessage && (

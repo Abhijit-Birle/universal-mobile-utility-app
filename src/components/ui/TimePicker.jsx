@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import Icon from './Icon.jsx';
 import WheelPicker from './WheelPicker.jsx';
 
-export default function TimePicker({ value, onChange, theme, fontBody, placeholder = 'Set time' }) {
+export default function TimePicker({ value, onChange, theme, fontBody, placeholder = 'Set time', alignRight = false, openDown = false }) {
   const [open, setOpen] = useState(false);
   const ref = useRef();
 
@@ -69,7 +69,11 @@ export default function TimePicker({ value, onChange, theme, fontBody, placehold
 
       {open && (
         <div style={{
-          position: 'absolute', bottom: '120%', left: 0, zIndex: 100,
+          position: 'absolute', 
+          ...(openDown ? { top: '120%' } : { bottom: '120%' }),
+          /* ponytail: anchor right to fix out of bounds */
+          ...(alignRight ? { right: 0 } : { left: 0 }), 
+          zIndex: 100,
           background: theme.bg, borderRadius: 18,
           boxShadow: theme.shadowRaised,
           padding: '16px 14px', width: 220,

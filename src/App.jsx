@@ -88,6 +88,7 @@ import BreathingExercise from "./components/BreathingExercise";
 import MoneyTab from "./tabs/MoneyTab.jsx";
 import TodoTab from "./tabs/TodoTab.jsx";
 import TimePicker from "./components/ui/TimePicker.jsx";
+import NeoSelect from "./components/ui/NeoSelect.jsx";
 import { useTodos } from "./hooks/useTodos.js";
 import { CURRENCIES, formatCurrency, getCurrencyByCode } from "./utils/currency.js";
 import {
@@ -961,7 +962,8 @@ export default function NeoApp() {
         >
           <div style={{ display: "flex", alignItems: "center", gap: 10, flex: 1, minWidth: 0 }}>
             <SectionLabel style={{ margin: 0, cursor: "pointer", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{title}</SectionLabel>
-            {extraHeader}
+            {/* ponytail: min change, just allow fn for extraHeader */}
+            {typeof extraHeader === 'function' ? extraHeader(isOpen) : extraHeader}
           </div>
           <div style={{
             transform: isOpen ? "rotate(180deg)" : "rotate(0deg)",
@@ -1979,42 +1981,30 @@ export default function NeoApp() {
                 />
               </div>
 
-              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                  <div style={{ width: 44, height: 44, borderRadius: 14, background: theme.bg, boxShadow: theme.shadowRaisedSm, display: "flex", alignItems: "center", justifyContent: "center", color: theme.accent, flexShrink: 0 }}>
-                    <Calendar size={18} />
-                  </div>
-                  <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 6 }}>
-                    <NeoDatePicker value={newDate} onChange={setNewDate} />
-                    <div style={{ height: 1, background: theme.border, opacity: 0.5 }} />
-                    <TimePicker value={newTime} onChange={setNewTime} theme={theme} fontBody={fontBody} />
-                  </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                <div style={{ width: 44, height: 44, borderRadius: 14, background: theme.bg, boxShadow: theme.shadowRaisedSm, display: "flex", alignItems: "center", justifyContent: "center", color: theme.accent, flexShrink: 0 }}>
+                  <Calendar size={18} />
+                </div>
+                {/* ponytail: min change, flex row for side-by-side pickers */}
+                <div style={{ flex: 1, display: "flex", alignItems: "center", gap: 12 }}>
+                  <div style={{ flex: 1 }}><NeoDatePicker value={newDate} onChange={setNewDate} /></div>
+                  <div style={{ width: 1, height: 24, background: theme.border, opacity: 0.5 }} />
+                  <div style={{ flex: 1 }}><TimePicker value={newTime} onChange={setNewTime} theme={theme} fontBody={fontBody} alignRight openDown /></div>
                 </div>
               </div>
               
               <div style={{ fontSize: 11, fontWeight: 700, color: theme.textSecondary, marginTop: 4 }}>PAYMENT METHOD</div>
-              <select
+              {/* ponytail: replaced native select with NeoSelect for neomorphism */}
+              <NeoSelect
                 value={newMethod}
-                onChange={e => setNewMethod(e.target.value)}
-                style={{
-                  width: "100%",
-                  padding: "12px 14px",
-                  borderRadius: 14,
-                  background: theme.bg,
-                  color: theme.textPrimary,
-                  border: "none",
-                  boxShadow: theme.shadowInset,
-                  fontSize: 14,
-                  ...fontBody,
-                  outline: "none",
-                  marginBottom: 8
-                }}
-              >
-                <option value="UPI">UPI</option>
-                {banks.map(b => (
-                  <option key={b.id} value={b.id}>{b.bankName}</option>
-                ))}
-              </select>
+                onChange={setNewMethod}
+                options={[
+                  { value: "UPI", label: "UPI" },
+                  ...banks.map(b => ({ value: b.id, label: b.bankName }))
+                ]}
+                theme={theme}
+                fontBody={fontBody}
+              />
 
               <div style={{ fontSize: 11, fontWeight: 700, color: theme.textSecondary, marginTop: 4 }}>DESCRIPTION</div>
               <NeoInput placeholder="Description (e.g., Starbucks, Uber)" value={newDesc} onChange={e => handleDescChange(e.target.value)} />
@@ -2032,7 +2022,8 @@ export default function NeoApp() {
                     </div>
                   }
                 >
-                  <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12, marginTop: 12 }}>
+                  {/* ponytail: min change, grid 4 columns, smaller padding */}
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 8, marginTop: 12 }}>
                     {(newType === "expense" ? ALL_EXPENSE_CATEGORIES : INCOME_CATEGORIES).map(c => (
                       <div
                         key={c}
@@ -2042,19 +2033,19 @@ export default function NeoApp() {
                           flexDirection: "column",
                           alignItems: "center",
                           justifyContent: "center",
-                          gap: 6,
+                          gap: 4,
                           cursor: "pointer",
-                          padding: "16px 8px",
-                          borderRadius: 16,
+                          padding: "10px 4px",
+                          borderRadius: 12,
                           background: newCat === c ? theme.accent : theme.bg,
                           boxShadow: newCat === c ? theme.shadowInset : theme.shadowRaisedSm,
                           transition: "all 0.2s"
                         }}
                       >
-                        <div style={{ fontSize: 24, marginBottom: 4 }}>
-                          {TX_CATEGORY_ICONS[c] || (customCategoryIcons[c] ? RENDER_CUSTOM_ICON(customCategoryIcons[c], 18) : <Box size={18} />)}
+                        <div style={{ fontSize: 20, marginBottom: 2 }}>
+                          {TX_CATEGORY_ICONS[c] || (customCategoryIcons[c] ? RENDER_CUSTOM_ICON(customCategoryIcons[c], 16) : <Box size={16} />)}
                         </div>
-                        <div style={{ fontSize: 11, fontWeight: 700, ...fontBody, textAlign: "center", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", width: "100%", color: newCat === c ? "#fff" : theme.textSecondary }}>
+                        <div style={{ fontSize: 10, fontWeight: 700, ...fontBody, textAlign: "center", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", width: "100%", color: newCat === c ? "#fff" : theme.textSecondary }}>
                           {c}
                         </div>
                       </div>
@@ -2064,12 +2055,12 @@ export default function NeoApp() {
                       <div
                         onClick={() => setShowCategoryForm(true)}
                         style={{
-                          display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 6,
-                          cursor: "pointer", padding: "16px 8px", borderRadius: 16, background: theme.bg, boxShadow: theme.shadowRaisedSm, transition: "all 0.2s"
+                          display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 4,
+                          cursor: "pointer", padding: "10px 4px", borderRadius: 12, background: theme.bg, boxShadow: theme.shadowRaisedSm, transition: "all 0.2s"
                         }}
                       >
-                        <div style={{ fontSize: 24, marginBottom: 4, color: theme.textSecondary }}><Plus size={22} /></div>
-                        <div style={{ fontSize: 11, fontWeight: 700, ...fontBody, textAlign: "center", color: theme.textSecondary }}>Add New</div>
+                        <div style={{ fontSize: 20, marginBottom: 2, color: theme.textSecondary }}><Plus size={18} /></div>
+                        <div style={{ fontSize: 10, fontWeight: 700, ...fontBody, textAlign: "center", color: theme.textSecondary }}>Add New</div>
                       </div>
                     )}
                   </div>
@@ -2368,16 +2359,18 @@ export default function NeoApp() {
                     : "All transactions"
               }
               defaultOpen={false}
-              extraHeader={
+              extraHeader={(isOpen) => (
                 <div style={{ display: "flex", alignItems: "center", gap: 8, marginLeft: "auto" }}>
-                  <button onClick={(e) => { e.stopPropagation(); setShowCalendarWidget(!showCalendarWidget); }} style={{ width: 28, height: 28, borderRadius: 8, background: showCalendarWidget ? theme.accent : theme.bg, border: "none", boxShadow: showCalendarWidget ? theme.shadowInset : theme.shadowRaisedSm, color: showCalendarWidget ? "#fff" : theme.accent, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", transition: "all 0.2s" }} title="Toggle Calendar">
-                    <Calendar size={14} />
-                  </button>
+                  {isOpen && (
+                    <button onClick={(e) => { e.stopPropagation(); setShowCalendarWidget(!showCalendarWidget); }} style={{ width: 28, height: 28, borderRadius: 8, background: showCalendarWidget ? theme.accent : theme.bg, border: "none", boxShadow: showCalendarWidget ? theme.shadowInset : theme.shadowRaisedSm, color: showCalendarWidget ? "#fff" : theme.accent, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", transition: "all 0.2s" }} title="Toggle Calendar">
+                      <Calendar size={14} />
+                    </button>
+                  )}
                   <button onClick={(e) => { e.stopPropagation(); exportFilteredDataToCSV(); }} style={{ width: 28, height: 28, borderRadius: 8, background: theme.bg, border: "none", boxShadow: theme.shadowRaisedSm, color: theme.accent, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }} title="Export as CSV">
                     <Download size={14} />
                   </button>
                 </div>
-              }
+              )}
             >
 
               {showCalendarWidget && (
@@ -2988,18 +2981,17 @@ Generate one short, helpful insight about my productivity or finances based ONLY
                 <DollarSign size={18} color={theme.textPrimary} />
                 <span style={{ fontSize: 15, fontWeight: 600, color: theme.textPrimary, ...fontBody }}>Base Currency</span>
               </div>
-              <select
-                value={baseCurrency}
-                onChange={(e) => setBaseCurrency(e.target.value)}
-                style={{
-                  background: theme.bg, color: theme.textPrimary, border: `1px solid ${theme.border}`,
-                  borderRadius: 8, padding: "4px 8px", fontSize: 14, ...fontBody, outline: "none"
-                }}
-              >
-                {CURRENCIES.map(c => (
-                  <option key={c.code} value={c.code}>{c.code} ({c.symbol})</option>
-                ))}
-              </select>
+              {/* ponytail: replaced native select with NeoSelect for neomorphism */}
+              <div style={{ width: 140 }}>
+                <NeoSelect
+                  value={baseCurrency}
+                  onChange={setBaseCurrency}
+                  options={CURRENCIES.map(c => ({ value: c.code, label: `${c.code} (${c.symbol})` }))}
+                  theme={theme}
+                  fontBody={fontBody}
+                  style={{ marginBottom: 0 }}
+                />
+              </div>
             </div>
             
             {/* Custom Category Rules */}

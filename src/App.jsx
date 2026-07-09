@@ -1772,12 +1772,10 @@ export default function NeoApp() {
     setShowImportConsent(false);
     setIsImporting(true);
     setImportErrorMsg("");
-    setToastMessage(`Processing ${files.length} file(s)...`);
+    setToastMessage(`Processing ${files.length} file(s) into one batch...`);
     try {
       const ai = new GoogleGenAI({ apiKey });
-      let allTxs = [];
-      let latestClosingBalance = null;
-      let aggregatedBankName = "";
+      let combinedText = "";
 
       for (const file of files) {
         let textContent = "";
@@ -1792,26 +1790,34 @@ export default function NeoApp() {
         } else {
           continue; // Skip unsupported silently in batch
         }
+        combinedText += `\n--- STATEMENT DATA FROM ${file.name} ---\n${textContent}\n`;
+      }
 
-        const prompt = `You are a financial statement parser.\nParse the following bank statement data into a strict JSON object.\nIMPORTANT: Extract EVERY SINGLE transaction. Do not omit, summarize, or skip any transactions, even if there are hundreds.\nFormat: { "bankName": "Name of Bank", "closingBalance": 15000, "transactions": [{ "name": "Description", "amount": 100, "type": "expense" or "income", "date": "YYYY-MM-DD", "category": "Food/Transport/Etc" }] }\nData:\n${textContent.slice(0, 30000)}`;
-        const response = await ai.models.generateContent({ model: 'gemini-2.5-flash', contents: prompt });
-        const text = (typeof response.text === 'function' ? response.text() : response.text) || "";
-        let jsonStr = text;
-        const match = text.match(/\{.*\}/s);
-        if (match) jsonStr = match[0];
-        
-        try {
-          const parsed = JSON.parse(jsonStr);
-          const txList = Array.isArray(parsed) ? parsed : (parsed.transactions || []);
-          allTxs = [...allTxs, ...txList];
-          
-          if (parsed.bankName) aggregatedBankName = parsed.bankName;
-          // Keep updating closingBalance. The last file parsed will set it.
-          // Ideally they upload files in order. If not, user can uncheck the update balance option later.
-          if (!isNaN(Number(parsed.closingBalance))) latestClosingBalance = Number(parsed.closingBalance);
-        } catch (parseErr) {
-          console.error("Could not parse AI response for file:", file.name, parseErr);
-        }
+      if (!combinedText.trim()) {
+         setToastMessage("No valid statement data found.");
+         setIsImporting(false);
+         return;
+      }
+
+      const prompt = `You are a financial statement parser.\nParse the following bank statement data into a strict JSON object.\nIMPORTANT: Extract EVERY SINGLE transaction. Do not omit, summarize, or skip any transactions, even if there are hundreds.\nIf there are multiple files, combine all their transactions into the single array.\nFormat: { "bankName": "Name of Bank", "closingBalance": 15000, "transactions": [{ "name": "Description", "amount": 100, "type": "expense" or "income", "date": "YYYY-MM-DD", "category": "Food/Transport/Etc" }] }\nData:\n${combinedText.slice(0, 150000)}`;
+      
+      const response = await ai.models.generateContent({ model: 'gemini-2.5-flash', contents: prompt });
+      const text = (typeof response.text === 'function' ? response.text() : response.text) || "";
+      let jsonStr = text;
+      const match = text.match(/\{.*\}/s);
+      if (match) jsonStr = match[0];
+      
+      let allTxs = [];
+      let latestClosingBalance = null;
+      let aggregatedBankName = "";
+      
+      try {
+        const parsed = JSON.parse(jsonStr);
+        allTxs = Array.isArray(parsed) ? parsed : (parsed.transactions || []);
+        if (parsed.bankName) aggregatedBankName = parsed.bankName;
+        if (!isNaN(Number(parsed.closingBalance))) latestClosingBalance = Number(parsed.closingBalance);
+      } catch (parseErr) {
+        throw new Error("Could not parse AI response: " + parseErr.message);
       }
       
       // Strict Deduplication Check against EXISTING transactions

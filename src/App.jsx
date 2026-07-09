@@ -81,8 +81,10 @@ import {
   Laptop,
   Building2,
   Box,
-  Tag
+  Tag,
+  AlertTriangle
 } from "lucide-react";
+import * as XLSX from "xlsx";
 import Strands from "./components/Strands";
 import BreathingExercise from "./components/BreathingExercise";
 import MoneyTab from "./tabs/MoneyTab.jsx";
@@ -362,6 +364,7 @@ export default function NeoApp() {
   const [isPlaying, setIsPlaying] = useState(false);
   const [volume, setVolume] = useState(0.5);
   const [isMuted, setIsMuted] = useState(false);
+  const [activeCategoryPie, setActiveCategoryPie] = useState(null);
   const fileInputRef = useRef(null);
   const audioRef = useRef(null);
 
@@ -536,7 +539,28 @@ export default function NeoApp() {
   const [currentSessionId, setCurrentSessionId] = useState(null);
 
   const [transactions, setTransactions] = useLocalStorage("neo_transactions", []);
+
+  useEffect(() => {
+    let hasFoodAndDining = false;
+    const migrated = transactions.map(t => {
+      if (t.category === "Food & Dining") {
+        hasFoodAndDining = true;
+        return { ...t, category: "Food" };
+      }
+      return t;
+    });
+    if (hasFoodAndDining) {
+      setTransactions(migrated);
+    }
+  }, [transactions, setTransactions]);
   const [customCategories, setCustomCategories] = useLocalStorage("neo_custom_categories", []);
+  
+  useEffect(() => {
+    if (customCategories.includes("Food & Dining")) {
+      setCustomCategories(prev => prev.filter(c => c !== "Food & Dining"));
+    }
+  }, [customCategories, setCustomCategories]);
+
   const [customCategoryIcons, setCustomCategoryIcons] = useLocalStorage("neo_custom_category_icons", {});
   const ALL_EXPENSE_CATEGORIES = [...EXPENSE_CATEGORIES, ...customCategories];
   const { todos, incrementPomodoro, toggleDone, updateTodo } = useTodos();
@@ -623,6 +647,8 @@ export default function NeoApp() {
   const [filterBank, setFilterBank] = useState("All");
   const [filterStartDate, setFilterStartDate] = useState("");
   const [filterEndDate, setFilterEndDate] = useState("");
+  const [filterCategory, setFilterCategory] = useState("All");
+  const [visibleTxCount, setVisibleTxCount] = useState(20);
   const [newAmount, setNewAmount] = useState("");
   const [newDesc, setNewDesc] = useState("");
   const [newCurrency, setNewCurrency] = useState("");
@@ -725,17 +751,12 @@ export default function NeoApp() {
 
 
   const [showKeyModal, setShowKeyModal] = useState(false);
-  const [apiKey, setApiKey] = useState("");
+  const [apiKey, setApiKey] = useLocalStorage("neo_gemini_api_key", "");
   const [direction, setDirection] = useState(1);
   const [showInsights, setShowInsights] = useState(false);
   const [showWidget, setShowWidget] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showRuleModal, setShowRuleModal] = useState(false);
-  const [showCsvModal, setShowCsvModal] = useState(false);
-  const [csvFile, setCsvFile] = useState(null);
-  const [csvPreview, setCsvPreview] = useState([]);
-  const [csvHeaders, setCsvHeaders] = useState([]);
-  const [colMap, setColMap] = useState({ date: "", amount: "", deposit: "", balance: "", desc: "", type: "" });
   const [showWipeConfirm, setShowWipeConfirm] = useState(false);
   const [toastMessage, setToastMessage] = useState("");
 
@@ -748,6 +769,16 @@ export default function NeoApp() {
 
   const [syncState, setSyncState] = useState("synced"); // synced | syncing
   const [customCategoryRules, setCustomCategoryRules] = useLocalStorage("neo_custom_category_rules", []);
+  
+  // Statement Import State
+  const [importReviewData, setImportReviewData] = useState(null);
+  const [isImporting, setIsImporting] = useState(false);
+  const [importErrorMsg, setImportErrorMsg] = useState("");
+  const [duplicateWarning, setDuplicateWarning] = useState(false);
+  const [showImportConsent, setShowImportConsent] = useState(false);
+  const [pendingImportFile, setPendingImportFile] = useState(null);
+  const [showImportCelebration, setShowImportCelebration] = useState(false);
+  const [importedCount, setImportedCount] = useState(0);
   const touchData = useRef({ x: 0, y: 0, active: false });
 
   // Handle Hardware Back Button (Android)
@@ -763,7 +794,6 @@ export default function NeoApp() {
         if (showNoteModal) { setShowNoteModal(false); return; }
         if (showDailyGoalModal) { setShowDailyGoalModal(false); return; }
         if (showSettings) { setShowSettings(false); return; }
-        if (showCsvModal) { setShowCsvModal(false); setCsvFile(null); setCsvPreview([]); return; }
         if (showKeyModal) { setShowKeyModal(false); return; }
         if (showInsights) { setShowInsights(false); return; }
 
@@ -776,7 +806,7 @@ export default function NeoApp() {
     return () => {
       if (listener) listener.remove();
     };
-  }, [showForm, showBudgetModal, showBudgetDropdown, showBanksList, showCategoryDrawer, showNoteModal, showDailyGoalModal, showSettings, showCsvModal, showKeyModal, showInsights]);
+  }, [showForm, showBudgetModal, showBudgetDropdown, showBanksList, showCategoryDrawer, showNoteModal, showDailyGoalModal, showSettings, showKeyModal, showInsights]);
 
   const switchTab = (newTab) => {
     if (newTab === activeTab) return;
@@ -1727,6 +1757,94 @@ export default function NeoApp() {
 
   /* ---------------------------------- EXPENSE TAB ---------------------------------- */
 
+  const processImportFile = async (file) => {
+    setShowImportConsent(false);
+    setIsImporting(true);
+    setImportErrorMsg("");
+    setToastMessage("Processing " + file.name + "...");
+    try {
+      let textContent = "";
+      const fileName = file.name.toLowerCase();
+      if (fileName.endsWith('.csv') || fileName.endsWith('.txt')) {
+        textContent = await file.text();
+      } else if (fileName.endsWith('.xls') || fileName.endsWith('.xlsx')) {
+        const data = await file.arrayBuffer();
+        const workbook = XLSX.read(data, { type: 'array' });
+        const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+        textContent = XLSX.utils.sheet_to_csv(firstSheet);
+      } else {
+        setToastMessage("Unsupported file format. Please upload CSV or Excel.");
+        setIsImporting(false);
+        return;
+      }
+      const prompt = `You are a financial statement parser.\nParse the following bank statement data into a strict JSON object.\nIMPORTANT: Extract EVERY SINGLE transaction. Do not omit, summarize, or skip any transactions, even if there are hundreds.\nFormat: { "bankName": "Name of Bank", "closingBalance": 15000, "transactions": [{ "name": "Description", "amount": 100, "type": "expense" or "income", "date": "YYYY-MM-DD", "category": "Food/Transport/Etc" }] }\nData:\n${textContent.slice(0, 30000)}`;
+      console.log("Calling Gemini API...");
+      const ai = new GoogleGenAI({ apiKey });
+      const response = await ai.models.generateContent({ model: 'gemini-2.5-flash', contents: prompt });
+      console.log("Gemini response received:", response);
+      const text = (typeof response.text === 'function' ? response.text() : response.text) || "";
+      let jsonStr = text;
+      const match = text.match(/\{.*\}/s);
+      if (match) jsonStr = match[0];
+      let parsed;
+      try {
+        parsed = JSON.parse(jsonStr);
+      } catch (parseErr) {
+        throw new Error("Could not parse AI response: " + parseErr.message + " | Raw: " + text.substring(0, 200));
+      }
+      
+      const txList = Array.isArray(parsed) ? parsed : (parsed.transactions || []);
+      
+      // Strict Deduplication Check
+      const uniqueNewTxs = txList.filter(newTx => {
+        const fallbackDate = new Date().toISOString().split('T')[0];
+        const newDate = newTx.date || fallbackDate;
+        const newType = String(newTx.type || "expense").toLowerCase().includes("income") ? "income" : "expense";
+        const newAmount = Math.abs(Number(newTx.amount) || 0);
+        
+        const isDuplicate = transactions.some(existingTx => 
+          existingTx.date === newDate &&
+          existingTx.type === newType &&
+          Math.abs(Number(existingTx.amount)) === newAmount
+        );
+        return !isDuplicate;
+      });
+
+      if (!uniqueNewTxs || uniqueNewTxs.length === 0) {
+        setDuplicateWarning(true);
+        setIsImporting(false);
+        return;
+      }
+
+      const txs = uniqueNewTxs.map(t => {
+        const txType = String(t.type || "expense").toLowerCase().includes("income") ? "income" : "expense";
+        const txAmount = Math.abs(Number(t.amount) || 0);
+        return {
+          id: "imp_" + Date.now() + "_" + Math.random().toString(36).substring(7),
+          name: t.name || t.description || "Imported Tx",
+          desc: t.name || t.description || "Imported Tx",
+          category: t.category || (txType === "income" ? "Income" : "Other"),
+          type: txType,
+          amount: txAmount,
+          date: t.date || new Date().toISOString().split('T')[0],
+          time: new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }),
+        };
+      });
+
+      setImportReviewData({
+        txs,
+        bankName: parsed.bankName || "",
+        closingBalance: Number(parsed.closingBalance)
+      });
+    } catch (err) {
+      console.error("Import error:", err);
+      const msg = "Import failed: " + (err.message || String(err));
+      setToastMessage(msg);
+      setImportErrorMsg(msg);
+    } finally {
+      setIsImporting(false);
+    }
+  };
 
 
   const renderExpenseTab = () => {
@@ -1806,16 +1924,11 @@ export default function NeoApp() {
       dayFiltered = dayFiltered.filter(t => t.date <= filterEndDate);
     }
 
-    if (!filterStartDate && !filterEndDate) {
-      dayFiltered = selectedDate 
-        ? dayFiltered.filter((t) => {
-            const [y, m, d] = t.date.split("-");
-            return y === targetYearStr && m === targetMonthStr && Number(d) === selectedDate;
-          })
-        : dayFiltered.filter((t) => {
-            const [y, m] = t.date.split("-");
-            return y === targetYearStr && m === targetMonthStr;
-          });
+    if (!filterStartDate && !filterEndDate && selectedDate) {
+      dayFiltered = dayFiltered.filter((t) => {
+        const [y, m, d] = t.date.split("-");
+        return y === targetYearStr && m === targetMonthStr && Number(d) === selectedDate;
+      });
     }
 
     if (filterType !== "All") {
@@ -1824,9 +1937,27 @@ export default function NeoApp() {
     if (filterBank !== "All") {
       dayFiltered = dayFiltered.filter(t => String(t.method) === String(filterBank));
     }
+    if (filterCategory !== "All") {
+      dayFiltered = dayFiltered.filter(t => t.category === filterCategory);
+    }
 
     // Sort descending by date
     dayFiltered.sort((a, b) => new Date(b.date) - new Date(a.date));
+
+    const handleImportStatement = (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      e.target.value = '';
+      console.log("File selected for import:", file.name);
+      if (!apiKey) {
+        setShowKeyModal(true);
+        setToastMessage("\u26a0\ufe0f Please set your Gemini API key first.");
+        return;
+      }
+      setPendingImportFile(file);
+      setShowImportConsent(true);
+    };
+
 
     const exportFilteredDataToCSV = () => {
       if (dayFiltered.length === 0) return;
@@ -2141,24 +2272,77 @@ export default function NeoApp() {
               )}
             </NeoSurface>
 
-            {categoryPieData.length > 0 && (
+            {categoryPieData.length > 0 ? (
               <NeoSurface style={{ padding: 20, marginBottom: 24, display: 'flex', flexDirection: 'column', gap: 16, position: 'relative', overflow: 'hidden' }}>
-                <div style={{ fontSize: 14, color: theme.textSecondary, fontWeight: 700, ...fontDisplay }}>Expenses by Category</div>
-                <div style={{ display: 'flex', justifyContent: 'center' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', zIndex: 10 }}>
+                  <div style={{ fontSize: 14, color: theme.textSecondary, fontWeight: 700, ...fontDisplay }}>Expenses by Category</div>
+                  <NeoSelect
+                    value={activeCategoryPie ? activeCategoryPie.name : "All"}
+                    onChange={(val) => {
+                      if (val === "All") setActiveCategoryPie(null);
+                      else {
+                        const found = categoryPieData.find(c => c.name === val);
+                        if (found) setActiveCategoryPie(found);
+                      }
+                    }}
+                    options={[
+                      { label: "All Categories", value: "All" },
+                      ...categoryPieData.map(c => ({ label: c.name, value: c.name }))
+                    ]}
+                    theme={theme}
+                    fontBody={fontBody}
+                    style={{ width: 140, marginBottom: 0 }}
+                  />
+                </div>
+                <div style={{ position: 'relative', display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 220 }}>
                   <PieChart width={220} height={220}>
-                    <Pie data={categoryPieData} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={60} outerRadius={100} stroke="none" paddingAngle={2}>
+                    <Pie 
+                      data={categoryPieData} 
+                      dataKey="value" 
+                      nameKey="name" 
+                      cx="50%" 
+                      cy="50%" 
+                      innerRadius={65} 
+                      outerRadius={100} 
+                      stroke="none" 
+                      paddingAngle={2}
+                      onMouseEnter={(data) => setActiveCategoryPie(data.payload || data)}
+                      onMouseLeave={() => setActiveCategoryPie(null)}
+                      onClick={(data) => setActiveCategoryPie(data.payload || data)}
+                    >
                       {categoryPieData.map((entry, index) => <Cell key={`cell-${index}`} fill={entry.fill} />)}
                     </Pie>
-                    <Tooltip cursor={{ fill: 'transparent' }} contentStyle={{ borderRadius: 12, border: "none", background: theme.bg, boxShadow: theme.shadowRaisedSm, color: theme.textPrimary }} />
                   </PieChart>
+                  
+                  {/* Center Text (Interactive) */}
+                  <div style={{ position: 'absolute', pointerEvents: 'none', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', width: 110, height: 110, borderRadius: '50%' }}>
+                    {activeCategoryPie ? (
+                      <>
+                        <div style={{ color: theme.textSecondary, fontSize: 11, fontWeight: 700, ...fontBody, lineHeight: 1.2, marginBottom: 2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "90%" }}>
+                          {activeCategoryPie.name}
+                        </div>
+                        <div style={{ color: activeCategoryPie.fill, fontSize: 16, fontWeight: 800, ...fontDisplay }}>
+                          {formatCurrency(activeCategoryPie.value, baseCurrency)}
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <div style={{ color: theme.textSecondary, fontSize: 11, fontWeight: 700, ...fontBody, lineHeight: 1.2, marginBottom: 2 }}>
+                          Total
+                        </div>
+                        <div style={{ color: theme.textPrimary, fontSize: 16, fontWeight: 800, ...fontDisplay }}>
+                          {formatCurrency(categoryPieData.reduce((sum, item) => sum + item.value, 0), baseCurrency)}
+                        </div>
+                      </>
+                    )}
+                  </div>
                 </div>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, justifyContent: 'center', marginTop: 8 }}>
-                  {categoryPieData.map(cat => (
-                    <div key={cat.name} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <div style={{ width: 10, height: 10, borderRadius: '50%', background: cat.fill }} />
-                      <div style={{ fontSize: 11, color: theme.textSecondary, ...fontBody }}>{cat.name}</div>
-                    </div>
-                  ))}
+              </NeoSurface>
+            ) : (
+              <NeoSurface style={{ padding: 20, marginBottom: 24, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: 220 }}>
+                <div style={{ fontSize: 14, color: theme.textSecondary, fontWeight: 700, ...fontDisplay, marginBottom: 16, alignSelf: 'flex-start' }}>Expenses by Category</div>
+                <div style={{ color: theme.textSecondary, fontSize: 13, ...fontBody, padding: 40, textAlign: 'center' }}>
+                  No expenses recorded in {new Date(targetYearStr, targetMonthStr - 1).toLocaleString('default', { month: 'long', year: 'numeric' })}.
                 </div>
               </NeoSurface>
             )}
@@ -2223,13 +2407,46 @@ export default function NeoApp() {
                   {formatCurrency(spentThisMonth, baseCurrency)}
                 </div>
               </div>
-              <div style={{ display: "flex", gap: 12 }}>
-                <NeoSurface onClick={() => setShowCsvModal(true)} style={{ display: "flex", alignItems: "center", justifyContent: "center", width: 44, height: 44, borderRadius: 16, cursor: "pointer", color: theme.accent }}>
-                  <Upload size={18} strokeWidth={2.5} />
+              <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+                <NeoSurface style={{ position: "relative", display: "flex", alignItems: "center", justifyContent: "center", width: 44, height: 44, borderRadius: 16, cursor: isImporting ? "wait" : "pointer", color: theme.accent, overflow: "hidden" }}>
+                  {!isImporting && <input type="file" accept=".csv,.txt,.xls,.xlsx" onChange={handleImportStatement} style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", opacity: 0, cursor: "pointer", zIndex: 10 }} title="Import Statement" />}
+                  {isImporting ? (
+                    <div style={{ position: "relative", zIndex: 1, width: 24, height: 24, display: "flex", alignItems: "center", justifyContent: "center", borderRadius: "50%", overflow: "hidden" }}>
+                      <Strands
+                        colors={["#F97316","#7C3AED","#06B6D4"]}
+                        count={4}
+                        speed={1.7}
+                        amplitude={2.1}
+                        waviness={1.6}
+                        thickness={0.7}
+                        glow={2.6}
+                        taper={3}
+                        spread={1}
+                        intensity={0.7}
+                        saturation={1.5}
+                        opacity={1}
+                        scale={1.3}
+                        glass
+                        refraction={1.35}
+                        dispersion={1}
+                        glassSize={1}
+                        hueShift={0.26}
+                      />
+                    </div>
+                  ) : (
+                    <Upload size={18} strokeWidth={2.5} style={{ position: "relative", zIndex: 1 }} />
+                  )}
                 </NeoSurface>
                 <PrimaryButton icon={<Plus size={16} strokeWidth={2.5} />} label="New" onClick={() => setShowForm(true)} style={{ padding: "12px 24px", borderRadius: 16, fontSize: 15 }} />
               </div>
             </div>
+
+            {importErrorMsg && (
+              <div style={{ margin: "0 0 16px", padding: "12px 16px", borderRadius: 12, background: "#ff3b3022", border: "1px solid #ff3b30", color: theme.danger, fontSize: 13, ...fontBody }}>
+                ⚠️ {importErrorMsg}
+                <button onClick={() => setImportErrorMsg("")} style={{ float: "right", background: "none", border: "none", color: theme.danger, cursor: "pointer", fontWeight: 700 }}>✕</button>
+              </div>
+            )}
 
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
               <SectionLabel style={{ margin: 0, textTransform: "uppercase", fontSize: 13, letterSpacing: 0.5 }}>Category budgets</SectionLabel>
@@ -2426,59 +2643,97 @@ export default function NeoApp() {
                   <option value="UPI">UPI</option>
                   {banks.map(b => <option key={b.id} value={b.id}>{b.bankName.substring(0, 10)}</option>)}
                 </select>
+                <select value={filterCategory} onChange={e => { setFilterCategory(e.target.value); setVisibleTxCount(20); }} style={{ flexShrink: 0, padding: "6px 8px", borderRadius: 10, background: theme.bg, color: theme.textPrimary, border: "none", boxShadow: theme.shadowInset, fontSize: 11, fontWeight: 600, outline: "none", ...fontBody }}>
+                  <option value="All">All Categories</option>
+                  {[...new Set(transactions.map(t => t.category))].map(c => <option key={c} value={c}>{c}</option>)}
+                </select>
                 <NeoDatePicker value={filterStartDate} onChange={setFilterStartDate} placeholder="From" style={{ height: 28, fontSize: 10, padding: "4px 8px", minWidth: 70 }} wrapperStyle={{ flex: "1 1 70px" }} />
                 <NeoDatePicker value={filterEndDate} onChange={setFilterEndDate} placeholder="To" style={{ height: 28, fontSize: 10, padding: "4px 8px", minWidth: 70 }} wrapperStyle={{ flex: "1 1 70px" }} />
               </div>
 
             <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                 {(() => {
-                  let lastDate = "";
-                  return dayFiltered.map((t) => {
-                    const showDate = t.date !== lastDate;
-                    lastDate = t.date;
-                    return (
-                      <div key={t.id} style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                        {showDate && (
-                          <div style={{ marginTop: 6, fontSize: 11, fontWeight: 700, color: theme.textSecondary, textTransform: "uppercase", letterSpacing: 1, paddingLeft: 4 }}>
-                            {new Date(t.date).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", year: "numeric" })}
-                          </div>
-                        )}
-                        <SwipeRow onDelete={() => deleteTx(t.id)}>
-                      <NeoSurface onClick={() => openEdit(t)} style={{ padding: "12px 14px", display: "flex", alignItems: "center", gap: 10, borderRadius: 20, cursor: "pointer" }}>
-                        <div style={{
-                          width: 36, height: 36, borderRadius: 12, flexShrink: 0, background: theme.bg,
-                          boxShadow: theme.shadowRaisedSm, display: "flex", alignItems: "center", justifyContent: "center",
-                          fontSize: 16
-                        }}>
-                          {TX_CATEGORY_ICONS[t.category] || (customCategoryIcons[t.category] ? RENDER_CUSTOM_ICON(customCategoryIcons[t.category], 16) : <Box size={16} />)}
-                        </div>
-                        <div style={{ display: "flex", flexDirection: "column", gap: 3, flex: 1 }}>
-                          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                            <span style={{ color: theme.textPrimary, fontWeight: 600, fontSize: 13.5, ...fontBody }}>{t.category}</span>
-                            <BankBadge tx={t} />
-                            {t.recurring && <Repeat size={12} color={theme.textSecondary} />}
-                            {t.split && <Split size={12} color={theme.accent} />}
-                          </div>
-                          <div style={{ display: "flex", alignItems: "center", gap: 8, color: theme.textSecondary, fontSize: 11, ...fontBody }}>
-                            <span>{t.name}</span>
+                  const displayedTxs = dayFiltered.slice(0, visibleTxCount);
+                  const grouped = {};
+                  displayedTxs.forEach(t => {
+                    const mKey = t.date.substring(0, 7);
+                    if (!grouped[mKey]) grouped[mKey] = { total: 0, txs: [] };
+                    grouped[mKey].txs.push(t);
+                    grouped[mKey].total += (t.type === "income" ? t.amount : -t.amount);
+                  });
+                  const sortedMonths = Object.keys(grouped).sort((a,b) => b.localeCompare(a));
 
-                            {t.originalCurrency && t.originalCurrency !== baseCurrency && (
-                              <span style={{ color: theme.textSecondary }}>· {formatCurrency(t.originalAmount, t.originalCurrency)}</span>
-                            )}
-                            {t.split && <span style={{ color: theme.accent }}>· split with {t.splitWith}</span>}
+                  return sortedMonths.map(monthKey => {
+                    const monthData = grouped[monthKey];
+                    const [y, m] = monthKey.split("-");
+                    const dateObj = new Date(y, m - 1);
+                    const monthLabel = dateObj.toLocaleDateString("en-US", { month: "long", year: "numeric" });
+                    
+                    let lastDate = "";
+                    return (
+                      <div key={monthKey} style={{ marginBottom: 16 }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10, padding: "0 4px" }}>
+                          <div style={{ fontSize: 13, fontWeight: 800, color: theme.textPrimary, textTransform: "uppercase", letterSpacing: 0.5 }}>
+                            {monthLabel}
+                          </div>
+                          <div style={{ fontSize: 13, fontWeight: 700, color: monthData.total >= 0 ? theme.success : theme.danger }}>
+                            {monthData.total >= 0 ? "+" : "-"}{formatCurrency(Math.abs(monthData.total), baseCurrency)}
                           </div>
                         </div>
-                        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                          <span style={{ fontSize: 14, fontWeight: 700, color: t.type === "income" ? theme.success : theme.danger, ...fontBody }}>
-                            {t.type === "income" ? "+" : "-"}{formatCurrency(t.amount, baseCurrency)}
-                          </span>
+                        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                          {monthData.txs.map((t) => {
+                            const showDate = t.date !== lastDate;
+                            lastDate = t.date;
+                            return (
+                              <div key={t.id} style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                                {showDate && (
+                                  <div style={{ marginTop: 6, fontSize: 11, fontWeight: 700, color: theme.textSecondary, textTransform: "uppercase", letterSpacing: 1, paddingLeft: 4 }}>
+                                    {new Date(t.date).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}
+                                  </div>
+                                )}
+                                <SwipeRow onDelete={() => deleteTx(t.id)}>
+                                  <NeoSurface onClick={() => openEdit(t)} style={{ padding: "12px 14px", display: "flex", alignItems: "center", gap: 10, borderRadius: 20, cursor: "pointer" }}>
+                                    <div style={{
+                                      width: 36, height: 36, borderRadius: 12, flexShrink: 0, background: theme.bg,
+                                      boxShadow: theme.shadowRaisedSm, display: "flex", alignItems: "center", justifyContent: "center",
+                                      fontSize: 16
+                                    }}>
+                                      {TX_CATEGORY_ICONS[t.category] || (customCategoryIcons[t.category] ? RENDER_CUSTOM_ICON(customCategoryIcons[t.category], 16) : <Box size={16} />)}
+                                    </div>
+                                    <div style={{ display: "flex", flexDirection: "column", gap: 3, flex: 1 }}>
+                                      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                                        <span style={{ color: theme.textPrimary, fontWeight: 600, fontSize: 13.5, ...fontBody }}>{t.category}</span>
+                                        <BankBadge tx={t} />
+                                        {t.recurring && <Repeat size={12} color={theme.textSecondary} />}
+                                        {t.split && <Split size={12} color={theme.accent} />}
+                                      </div>
+                                      <div style={{ display: "flex", alignItems: "center", gap: 8, color: theme.textSecondary, fontSize: 11, ...fontBody }}>
+                                        <span>{t.name}</span>
+
+                                        {t.originalCurrency && t.originalCurrency !== baseCurrency && (
+                                          <span style={{ color: theme.textSecondary }}>· {formatCurrency(t.originalAmount, t.originalCurrency)}</span>
+                                        )}
+                                        {t.split && <span style={{ color: theme.accent }}>· split with {t.splitWith}</span>}
+                                      </div>
+                                    </div>
+                                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                                      <span style={{ fontSize: 14, fontWeight: 700, color: t.type === "income" ? theme.success : theme.danger, ...fontBody }}>
+                                        {t.type === "income" ? "+" : "-"}{formatCurrency(t.amount, baseCurrency)}
+                                      </span>
+                                    </div>
+                                  </NeoSurface>
+                                </SwipeRow>
+                              </div>
+                            );
+                          })}
                         </div>
-                      </NeoSurface>
-                    </SwipeRow>
                       </div>
                     );
                   });
                 })()}
+                {dayFiltered.length > visibleTxCount && (
+                  <PrimaryButton label="Load More" onClick={() => setVisibleTxCount(prev => prev + 20)} style={{ marginTop: 8, padding: "12px 0", borderRadius: 14, fontSize: 14 }} />
+                )}
               </div>
             </CollapsibleSection>
 
@@ -3027,353 +3282,7 @@ Generate one short, helpful insight about my productivity or finances based ONLY
     );
   }
 
-  /* ---------------------------------- CSV IMPORT MODAL ---------------------------------- */
 
-  function CsvImportModalComponent() {
-    const [selectedAccount, setSelectedAccount] = useState(banks.length > 0 ? String(banks[0].id) : "UPI");
-
-    const handleCsvFileSelect = (e) => {
-      const file = e.target.files[0];
-      if (!file) return;
-      setCsvFile(file);
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        const text = event.target.result;
-        let lines = [];
-        
-        // HDFC and other Indian banks often export HTML tables disguised as .xls files
-        if (text.toLowerCase().includes("<table") || text.toLowerCase().includes("<html")) {
-          const doc = new DOMParser().parseFromString(text, "text/html");
-          const rows = Array.from(doc.querySelectorAll("tr"));
-          lines = rows.map(tr => {
-            return Array.from(tr.querySelectorAll("td, th"))
-              .map(td => td.innerText.replace(/,/g, ' ').replace(/\n/g, ' ').trim())
-              .join(",");
-          }).filter(line => line.trim() !== "");
-        } else {
-          lines = text.split(/\r?\n/).filter(line => line.trim() !== "");
-        }
-        
-        if (lines.length > 0) {
-          let delimiter = ",";
-          let maxCols = 0;
-          let headerIndex = 0;
-          
-          for (let i = 0; i < Math.min(lines.length, 30); i++) {
-             const cleanL = lines[i].replace(/"([^"]*)"/g, (m, p1) => p1.replace(/,/g, ' '));
-             for (const delim of [",", "\t", ";"]) {
-                 const cols = cleanL.split(delim);
-                 if (cols.length > maxCols) {
-                     maxCols = cols.length;
-                     delimiter = delim;
-                     headerIndex = i;
-                 }
-             }
-          }
-          
-          const cleanLine = (line) => line.replace(/"([^"]*)"/g, (m, p1) => p1.replace(new RegExp(delimiter, 'g'), ' '));
-          
-          const headers = cleanLine(lines[headerIndex]).split(delimiter).map(s => s.trim());
-          setCsvHeaders(headers);
-          const preview = lines.slice(headerIndex + 1, headerIndex + 4).map(l => cleanLine(l).split(delimiter).map(s => s.trim()));
-          setCsvPreview(preview);
-          
-          const guessCol = (keywords) => {
-            const idx = headers.findIndex(h => keywords.some(k => h.toLowerCase().includes(k)));
-            return idx !== -1 ? idx.toString() : "";
-          };
-          
-          setColMap({
-            date: guessCol(['date', 'dt', 'time']),
-            amount: guessCol(['withdrawal', 'debit', 'amount', 'amt']),
-            deposit: guessCol(['deposit', 'credit']),
-            balance: guessCol(['balance', 'bal']),
-            desc: guessCol(['desc', 'narration', 'merchant', 'details', 'name', 'particulars', 'remark']),
-            type: "",
-            _delim: delimiter,
-            _headerIdx: headerIndex
-          });
-        }
-      };
-      reader.readAsText(file);
-    };
-
-    const handleCsvImport = () => {
-      if (!csvFile || colMap.date === "" || colMap.amount === "" || colMap.desc === "") return;
-      
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        const text = event.target.result;
-        let lines = [];
-        
-        if (text.toLowerCase().includes("<table") || text.toLowerCase().includes("<html")) {
-          const doc = new DOMParser().parseFromString(text, "text/html");
-          const rows = Array.from(doc.querySelectorAll("tr"));
-          lines = rows.map(tr => {
-            return Array.from(tr.querySelectorAll("td, th"))
-              .map(td => td.innerText.replace(/,/g, ' ').replace(/\n/g, ' ').trim())
-              .join(",");
-          }).filter(line => line.trim() !== "");
-        } else {
-          lines = text.split(/\r?\n/).filter(line => line.trim() !== "");
-        }
-        
-        if (lines.length < 2) return;
-        
-        const newTxs = [];
-        let totalImportAmount = 0;
-        let totalUpiAmount = 0;
-        let closingBalance = NaN;
-        let latestTimestamp = -Infinity;
-        
-        const delim = colMap._delim || ",";
-        const headerIdx = colMap._headerIdx || 0;
-        const cleanLine = (line) => line.replace(/"([^"]*)"/g, (m, p1) => p1.replace(new RegExp(delim, 'g'), ' '));
-        
-        for (let i = headerIdx + 1; i < lines.length; i++) {
-          const rawLine = lines[i];
-          if (rawLine.toUpperCase().includes("STATEMENT SUMMARY") || rawLine.toUpperCase().includes("OPENING BALANCE") || rawLine.toUpperCase().includes("END OF STATEMENT")) {
-            break;
-          }
-          const cols = cleanLine(rawLine).split(delim).map(s => s.trim());
-          const dateRaw = cols[parseInt(colMap.date)];
-          const withdrawRaw = cols[parseInt(colMap.amount)];
-          const depositRaw = colMap.deposit !== "" ? cols[parseInt(colMap.deposit)] : undefined;
-          const balRaw = colMap.balance !== "" ? cols[parseInt(colMap.balance)] : undefined;
-          const descRaw = cols[parseInt(colMap.desc)] || "Imported";
-          
-          if (!dateRaw || (!withdrawRaw && !depositRaw)) continue;
-
-          let type = "expense";
-          let amount = 0;
-
-          const wAmt = withdrawRaw ? parseFloat(withdrawRaw.replace(/[^0-9.-]/g, '')) : NaN;
-          const dAmt = depositRaw ? parseFloat(depositRaw.replace(/[^0-9.-]/g, '')) : NaN;
-
-          if (!isNaN(wAmt) && wAmt !== 0) {
-              if (colMap.deposit === "" && wAmt > 0) {
-                  type = "income";
-              } else {
-                  type = "expense";
-              }
-              amount = Math.abs(wAmt);
-          } else if (!isNaN(dAmt) && dAmt !== 0) {
-              type = "income";
-              amount = Math.abs(dAmt);
-          } else {
-              continue;
-          }
-          
-
-          const descLower = descRaw.toLowerCase();
-          let cat = "Other";
-          
-          const customMatch = customCategoryRules.find(r => descLower.includes(r.keyword.toLowerCase()));
-          if (customMatch) {
-            cat = customMatch.category;
-          } else {
-            for (const [c, keywords] of Object.entries(EXPENSE_CSV_MAP)) {
-              if (keywords.some(k => descLower.includes(k))) {
-                cat = c;
-                break;
-              }
-            }
-          }
-          
-          let formattedDate = getLocalToday();
-          let ts = NaN;
-          const dmyMatch = dateRaw.trim().match(/^(\d{2})[\/\-](\d{2})[\/\-](\d{2,4})$/);
-          let pd;
-          if (dmyMatch) {
-            const day = parseInt(dmyMatch[1], 10);
-            const month = parseInt(dmyMatch[2], 10) - 1;
-            let year = parseInt(dmyMatch[3], 10);
-            if (year < 100) year += 2000;
-            pd = new Date(year, month, day);
-          } else {
-            pd = new Date(dateRaw);
-          }
-          
-          ts = pd.getTime();
-          if (!isNaN(ts)) {
-            const yyyy = pd.getFullYear();
-            const mm = String(pd.getMonth() + 1).padStart(2, '0');
-            const dd = String(pd.getDate()).padStart(2, '0');
-            formattedDate = `${yyyy}-${mm}-${dd}`;
-          }
-          
-          if (balRaw) {
-             const bAmt = parseFloat(balRaw.replace(/[^0-9.-]/g, ''));
-             if (!isNaN(bAmt) && !isNaN(ts) && ts > latestTimestamp) {
-                latestTimestamp = ts;
-                closingBalance = bAmt;
-             }
-          }
-          let paymentType = null;
-          let method = selectedAccount;
-          if (descLower.match(/upi|vpa|@ybl|@okhdfcbank|@icici|paytm|gpay|phonepe/)) {
-            paymentType = "UPI";
-            method = "UPI";
-          } else if (descLower.match(/pos|card|debit|credit|atm/)) {
-            paymentType = "Card";
-          } else if (descLower.match(/netbanking|imps|neft|rtgs|online/)) {
-            paymentType = "Online";
-          }
-          
-          const newTx = {
-            id: Date.now() + i,
-            type: type,
-            amount: amount,
-            originalAmount: amount,
-            originalCurrency: baseCurrency,
-            exchangeRate: 1,
-            name: descRaw,
-            desc: descRaw,
-            category: cat,
-            method: method,
-            paymentType: paymentType,
-            date: formattedDate,
-            time: "12:00",
-          };
-          
-          const signedAmount = (type === "expense" ? -amount : amount);
-          totalImportAmount += signedAmount;
-          if (method === "UPI" && selectedAccount !== "UPI") {
-            totalUpiAmount += signedAmount;
-          }
-          
-          newTxs.push(newTx);
-        }
-        
-          if (newTxs.length > 0) {
-            setTransactions(prev => [...newTxs, ...prev]);
-            
-            if (!isNaN(closingBalance)) {
-              if (selectedAccount === "UPI") {
-                setBalances(prev => ({ ...prev, upi: closingBalance }));
-              } else {
-                setBanks(prevBanks => prevBanks.map(b => 
-                  String(b.id) === String(selectedAccount) ? { ...b, balance: closingBalance } : b
-                ));
-              }
-            } else {
-              updateBalanceForMethod(selectedAccount, totalImportAmount);
-            }
-            
-            if (selectedAccount !== "UPI" && totalUpiAmount !== 0) {
-              setBalances(prev => ({ ...prev, upi: (Number(prev.upi) || 0) + totalUpiAmount }));
-            }
-            
-          Haptics.impact({ style: ImpactStyle.Heavy });
-        }
-        
-        setCsvFile(null);
-        setCsvPreview([]);
-        setCsvHeaders([]);
-        setShowCsvModal(false);
-      };
-      reader.readAsText(csvFile);
-    };
-
-    return (
-      <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", display: "flex", alignItems: "flex-end", justifyContent: "center", zIndex: 60 }}>
-        <NeoSurface style={{ width: "100%", maxWidth: 390, maxHeight: "90vh", overflowY: "auto", padding: 24, borderBottomLeftRadius: 0, borderBottomRightRadius: 0 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
-            <div style={{ fontSize: 18, fontWeight: 700, color: theme.textPrimary, ...fontDisplay }}>Import CSV</div>
-            <button onClick={() => { setShowCsvModal(false); setCsvFile(null); setCsvPreview([]); }} style={{ border: "none", background: "none", color: theme.textSecondary, cursor: "pointer" }}><X size={18} /></button>
-          </div>
-          
-          {!csvFile ? (
-            <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-              <div style={{ background: theme.bg, padding: 16, borderRadius: 12, border: `1px solid ${theme.border}`, fontSize: 12, color: theme.textSecondary, display: "flex", flexDirection: "column", gap: 6, ...fontBody }}>
-                <strong style={{ color: theme.textPrimary, marginBottom: 4 }}>Format Requirements:</strong>
-                <div style={{ display: "flex", alignItems: "flex-start", gap: 6 }}><Check size={14} color={theme.success} style={{ flexShrink: 0, marginTop: 1 }} /> Must be a standard .csv or .xls file.</div>
-                <div style={{ display: "flex", alignItems: "flex-start", gap: 6 }}><Check size={14} color={theme.success} style={{ flexShrink: 0, marginTop: 1 }} /> The first active line must contain the column headers (Title line).</div>
-                <div style={{ display: "flex", alignItems: "flex-start", gap: 6 }}><Check size={14} color={theme.success} style={{ flexShrink: 0, marginTop: 1 }} /> Remove any unnecessary opening text or summary data before uploading.</div>
-              </div>
-              <label style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, background: theme.accent, color: "#fff", padding: 14, borderRadius: 16, cursor: "pointer", fontWeight: 600, ...fontBody }}>
-                <Upload size={18} />
-                Choose CSV/XLS File
-                <input type="file" accept=".csv,.xls" onChange={handleCsvFileSelect} id="csv-file-input" style={{ display: "none" }} />
-              </label>
-            </div>
-          ) : (
-            <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-              <div style={{ color: theme.textSecondary, fontSize: 13, ...fontBody }}>Map your CSV columns to import transactions.</div>
-              
-              <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", paddingBottom: 12, borderBottom: `1px solid ${theme.border}` }}>
-                  <span style={{ fontSize: 14, color: theme.textPrimary, fontWeight: 600, ...fontBody }}>Account to Update</span>
-                  <select value={selectedAccount} onChange={e => setSelectedAccount(e.target.value)} style={{ background: theme.bg, color: theme.textPrimary, border: `1px solid ${theme.border}`, borderRadius: 8, padding: "6px", outline: "none", maxWidth: 150 }}>
-                    <option value="" disabled>-- Select Bank --</option>
-                    {banks.map(b => (
-                      <option key={b.id} value={b.id}>{b.bankName}</option>
-                    ))}
-                  </select>
-                </div>
-                
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                  <span style={{ fontSize: 14, color: theme.textPrimary, fontWeight: 600, ...fontBody }}>Date Column</span>
-                  <select value={colMap.date} onChange={e => setColMap(prev => ({...prev, date: e.target.value}))} style={{ background: theme.bg, color: theme.textPrimary, border: `1px solid ${theme.border}`, borderRadius: 8, padding: "6px", outline: "none", maxWidth: 150 }}>
-                    <option value="">-- Select --</option>
-                    {csvHeaders.map((h, i) => <option key={i} value={i}>{h}</option>)}
-                  </select>
-                </div>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                  <span style={{ fontSize: 14, color: theme.textPrimary, fontWeight: 600, ...fontBody }}>Withdrawal/Amt</span>
-                  <select value={colMap.amount} onChange={e => setColMap(prev => ({...prev, amount: e.target.value}))} style={{ background: theme.bg, color: theme.textPrimary, border: `1px solid ${theme.border}`, borderRadius: 8, padding: "6px", outline: "none", maxWidth: 150 }}>
-                    <option value="">-- Select --</option>
-                    {csvHeaders.map((h, i) => <option key={i} value={i}>{h}</option>)}
-                  </select>
-                </div>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                  <span style={{ fontSize: 14, color: theme.textPrimary, fontWeight: 600, ...fontBody }}>Deposit <span style={{fontSize:10, opacity:0.6}}>(Optional)</span></span>
-                  <select value={colMap.deposit} onChange={e => setColMap(prev => ({...prev, deposit: e.target.value}))} style={{ background: theme.bg, color: theme.textPrimary, border: `1px solid ${theme.border}`, borderRadius: 8, padding: "6px", outline: "none", maxWidth: 150 }}>
-                    <option value="">-- Select --</option>
-                    {csvHeaders.map((h, i) => <option key={i} value={i}>{h}</option>)}
-                  </select>
-                </div>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                  <span style={{ fontSize: 14, color: theme.textPrimary, fontWeight: 600, ...fontBody }}>Description Column</span>
-                  <select value={colMap.desc} onChange={e => setColMap(prev => ({...prev, desc: e.target.value}))} style={{ background: theme.bg, color: theme.textPrimary, border: `1px solid ${theme.border}`, borderRadius: 8, padding: "6px", outline: "none", maxWidth: 150 }}>
-                    <option value="">-- Select --</option>
-                    {csvHeaders.map((h, i) => <option key={i} value={i}>{h}</option>)}
-                  </select>
-                </div>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                  <span style={{ fontSize: 14, color: theme.textPrimary, fontWeight: 600, ...fontBody }}>Balance <span style={{fontSize:10, opacity:0.6}}>(Optional)</span></span>
-                  <select value={colMap.balance} onChange={e => setColMap(prev => ({...prev, balance: e.target.value}))} style={{ background: theme.bg, color: theme.textPrimary, border: `1px solid ${theme.border}`, borderRadius: 8, padding: "6px", outline: "none", maxWidth: 150 }}>
-                    <option value="">-- Select --</option>
-                    {csvHeaders.map((h, i) => <option key={i} value={i}>{h}</option>)}
-                  </select>
-                </div>
-              </div>
-
-              {csvPreview.length > 0 && (
-                <div style={{ marginTop: 8, padding: 12, background: theme.bg, borderRadius: 12, boxShadow: theme.shadowInset, overflowX: "auto" }}>
-                  <div style={{ fontSize: 11, color: theme.textSecondary, marginBottom: 8, fontWeight: 700, textTransform: "uppercase" }}>Data Preview</div>
-                  {csvPreview.map((row, i) => (
-                    <div key={i} style={{ display: "flex", gap: 8, marginBottom: 4, whiteSpace: "nowrap", fontSize: 11, color: theme.textPrimary }}>
-                      {row.map((cell, j) => (
-                         <span key={j} style={{ background: theme.border, padding: "2px 6px", borderRadius: 4 }}>{cell.length > 15 ? cell.substring(0, 15) + "..." : cell}</span>
-                      ))}
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              <PrimaryButton 
-                label="Import Transactions" 
-                onClick={handleCsvImport} 
-                disabled={colMap.date === "" || colMap.amount === "" || colMap.desc === ""}
-                style={{ padding: 14, borderRadius: 16, marginTop: 8, opacity: (colMap.date === "" || colMap.amount === "" || colMap.desc === "") ? 0.5 : 1 }} 
-              />
-            </div>
-          )}
-        </NeoSurface>
-      </div>
-    );
-  }
 
   /* ---------------------------------- INSIGHTS OVERLAY ---------------------------------- */
 
@@ -3455,7 +3364,7 @@ Generate one short, helpful insight about my productivity or finances based ONLY
             <button onClick={() => setShowKeyModal(false)} style={{ border: "none", background: "none", color: theme.textSecondary }}><X size={18} /></button>
           </div>
           <div style={{ color: theme.textSecondary, fontSize: 12.5, lineHeight: 1.5, marginBottom: 20, ...fontBody }}>
-            Used to power AI insights with Gemini 2.5 Flash. Stored only for this session.
+            Used to power AI insights & statement import with Gemini 2.5 Flash. Saved securely in your browser.
           </div>
           <div style={{ position: "relative" }}>
             <NeoInput type={visible ? "text" : "password"} placeholder="Paste your API key" value={temp} onChange={(e) => setTemp(e.target.value)} style={{ paddingRight: 40 }} />
@@ -3730,6 +3639,91 @@ Generate one short, helpful insight about my productivity or finances based ONLY
         </div>
       )}
 
+      {/* IMPORT REVIEW MODAL */}
+      {importReviewData && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 90, display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <NeoSurface style={{ width: '90%', maxWidth: 400, maxHeight: '80vh', padding: 24, display: "flex", flexDirection: "column", gap: 16, overflowY: "auto" }}>
+            <div style={{ fontSize: 18, fontWeight: 700, color: theme.textPrimary, ...fontDisplay }}>Review Imported Transactions</div>
+            <div style={{ fontSize: 14, color: theme.textSecondary, ...fontBody }}>
+              {importReviewData.txs.length} new transactions found.
+              {importReviewData.bankName && <div style={{ marginTop: 4 }}>Account: <strong>{importReviewData.bankName}</strong></div>}
+            </div>
+            
+            <div style={{ display: "flex", flexDirection: "column", gap: 8, maxHeight: 300, overflowY: "auto" }}>
+              {importReviewData.txs.map((tx, idx) => (
+                <div key={idx} style={{ padding: 12, borderRadius: 12, background: theme.bg, boxShadow: theme.shadowInset }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
+                    <span style={{ fontWeight: 600, fontSize: 14, color: theme.textPrimary, ...fontBody }}>{tx.name}</span>
+                    <span style={{ fontWeight: 700, fontSize: 14, color: tx.type === 'income' ? theme.success : theme.textPrimary, ...fontDisplay }}>
+                      {tx.type === 'income' ? '+' : ''}{formatCurrency(tx.amount, baseCurrency)}
+                    </span>
+                  </div>
+                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: theme.textSecondary, ...fontBody }}>
+                    <span>{tx.date}</span>
+                    <span>{tx.category}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+              <button onClick={() => setImportReviewData(null)} style={{ flex: 1, padding: "12px", borderRadius: 12, border: "none", background: theme.bg, color: theme.textSecondary, boxShadow: theme.shadowRaisedSm, fontWeight: 600, ...fontBody, cursor: "pointer" }}>Cancel</button>
+              <button onClick={() => {
+                const count = importReviewData.txs.length;
+                let targetMethod = 'UPI';
+                const bankName = importReviewData.bankName;
+                const closingBalance = importReviewData.closingBalance;
+                let bankUpdated = false;
+
+                if (bankName) {
+                    const normalizedBank = bankName.toLowerCase();
+                    const isUpi = normalizedBank.includes('upi') || normalizedBank.includes('phonepe') || normalizedBank.includes('gpay') || normalizedBank.includes('paytm');
+                    
+                    if (isUpi) {
+                        targetMethod = 'UPI';
+                        if (!isNaN(closingBalance)) {
+                            setBalances(prev => ({ ...prev, upi: closingBalance }));
+                            bankUpdated = true;
+                        }
+                    } else {
+                        const existingBank = banks.find(b => b.bankName.toLowerCase().includes(normalizedBank) || normalizedBank.includes(b.bankName.toLowerCase()));
+                        if (existingBank) {
+                            targetMethod = String(existingBank.id);
+                            if (!isNaN(closingBalance)) {
+                                setBanks(prev => prev.map(b => String(b.id) === targetMethod ? { ...b, balance: closingBalance } : b));
+                                bankUpdated = true;
+                            }
+                        } else {
+                            targetMethod = Date.now().toString();
+                            setBanks(prev => [...prev, { id: targetMethod, bankName: bankName, balance: isNaN(closingBalance) ? 0 : closingBalance, icon: "🏛️" }]);
+                            bankUpdated = true;
+                        }
+                    }
+                } else if (banks.length > 0) {
+                    targetMethod = String(banks[0].id);
+                }
+
+                const txsToSave = importReviewData.txs.map(tx => ({ ...tx, method: targetMethod }));
+                setTransactions(prev => [...txsToSave, ...prev]);
+                
+                // If we didn't extract a closing balance to explicitly set the bank's balance, we apply the deltas manually
+                if (!bankUpdated) {
+                   txsToSave.forEach(tx => {
+                     const delta = tx.type === 'income' ? tx.amount : -tx.amount;
+                     updateBalanceForMethod(tx.method, delta);
+                   });
+                }
+
+                setImportedCount(count);
+                setImportReviewData(null);
+                setShowImportCelebration(true);
+                setTimeout(() => setShowImportCelebration(false), 4000);
+              }} style={{ flex: 1, padding: "12px", borderRadius: 12, border: "none", background: theme.accent, color: "#fff", fontWeight: 700, ...fontBody, cursor: "pointer" }}>Save All ✓</button>
+            </div>
+          </NeoSurface>
+        </div>
+      )}
+
       {/* TOAST NOTIFICATION */}
       {toastMessage && (
         <div style={{ position: "fixed", bottom: 20, left: "50%", transform: "translateX(-50%)", background: theme.textPrimary, color: theme.bg, padding: "12px 24px", borderRadius: 30, fontSize: 14, fontWeight: 600, ...fontBody, zIndex: 100, boxShadow: theme.shadowRaisedLg, animation: "fadeIn 0.3s ease-out" }}>
@@ -3737,7 +3731,78 @@ Generate one short, helpful insight about my productivity or finances based ONLY
         </div>
       )}
 
-      {showCsvModal && <CsvImportModalComponent />}
+
+      {/* IMPORT CONSENT MODAL */}
+      {showImportConsent && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.55)", zIndex: 95, display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
+          <NeoSurface style={{ width: "100%", maxWidth: 360, padding: 24, display: "flex", flexDirection: "column", gap: 16 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+              <div style={{ width: 40, height: 40, borderRadius: "50%", background: "#f59e0b22", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                <span style={{ fontSize: 20 }}>🛡️</span>
+              </div>
+              <div style={{ fontSize: 17, fontWeight: 700, color: theme.textPrimary, ...fontDisplay }}>Privacy Notice</div>
+            </div>
+            <div style={{ fontSize: 13.5, color: theme.textSecondary, lineHeight: 1.65, ...fontBody }}>
+              Your statement data (<strong style={{ color: theme.textPrimary }}>{pendingImportFile?.name}</strong>) will be sent to <strong style={{ color: theme.textPrimary }}>Google Gemini AI</strong> for parsing.
+            </div>
+            <div style={{ padding: "12px 14px", borderRadius: 12, background: "#f59e0b15", border: "1px solid #f59e0b55", fontSize: 13, color: "#b45309", lineHeight: 1.6, ...fontBody }}>
+              ⚠️ <strong>Avoid uploading files with:</strong>
+              <ul style={{ margin: "6px 0 0 16px", padding: 0 }}>
+                <li>Passwords or PINs</li>
+                <li>Full account numbers</li>
+                <li>Aadhaar / PAN details</li>
+              </ul>
+              Bank statement CSVs are generally safe as they only contain transaction history.
+            </div>
+            <div style={{ fontSize: 12, color: theme.textSecondary, ...fontBody }}>
+              Per Google's API policy, data sent via API is <strong>not used to train models</strong>.
+            </div>
+            <div style={{ display: "flex", gap: 10, marginTop: 4 }}>
+              <button onClick={() => { setShowImportConsent(false); setPendingImportFile(null); }} style={{ flex: 1, padding: "12px", borderRadius: 12, border: "none", background: theme.bg, color: theme.textSecondary, boxShadow: theme.shadowRaisedSm, fontWeight: 600, ...fontBody, cursor: "pointer" }}>Cancel</button>
+              <button onClick={() => processImportFile(pendingImportFile)} style={{ flex: 1, padding: "12px", borderRadius: 12, border: "none", background: theme.accent, color: "#fff", fontWeight: 700, ...fontBody, cursor: "pointer" }}>Proceed →</button>
+            </div>
+          </NeoSurface>
+        </div>
+      )}
+
+      {/* IMPORT CELEBRATION CARD */}
+      {showImportCelebration && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", zIndex: 96, display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
+          <NeoSurface style={{ width: "100%", maxWidth: 340, padding: 32, display: "flex", flexDirection: "column", alignItems: "center", gap: 16, textAlign: "center", animation: "fadeIn 0.4s ease-out" }}>
+            <div style={{ fontSize: 56, lineHeight: 1, animation: "bounceIn 0.5s ease-out" }}>🎉</div>
+            <div style={{ fontSize: 22, fontWeight: 800, color: theme.textPrimary, ...fontDisplay }}>Import Complete!</div>
+            <div style={{ fontSize: 15, color: theme.textSecondary, ...fontBody }}>
+              <span style={{ fontSize: 28, fontWeight: 800, color: theme.accent, display: "block", ...fontDisplay }}>{importedCount}</span>
+              transactions added to your account
+            </div>
+            <div style={{ fontSize: 13, color: theme.textSecondary, ...fontBody }}>Your bank balance has been updated automatically.</div>
+            <button onClick={() => setShowImportCelebration(false)} style={{ marginTop: 8, padding: "12px 32px", borderRadius: 30, border: "none", background: theme.accent, color: "#fff", fontWeight: 700, fontSize: 15, ...fontBody, cursor: "pointer" }}>
+              Awesome! 🚀
+            </button>
+          </NeoSurface>
+        </div>
+      )}
+
+      {duplicateWarning && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 99, display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
+          <NeoSurface style={{ padding: "20px 24px", display: "flex", flexDirection: "column", gap: 16, width: "100%", maxWidth: 320 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, color: theme.accent, fontWeight: 700, ...fontDisplay, fontSize: 16 }}>
+                <AlertTriangle size={20} strokeWidth={2.5} />
+                Duplicate Import
+              </div>
+              <button onClick={() => setDuplicateWarning(false)} style={{ background: "none", border: "none", color: theme.textSecondary, cursor: "pointer", display: "flex", padding: 0 }}>
+                <X size={20} strokeWidth={2.5} />
+              </button>
+            </div>
+            <div style={{ color: theme.textSecondary, fontSize: 14, ...fontBody, lineHeight: 1.5 }}>
+              We found <strong>0 new transactions</strong> in your statement. All records perfectly matched existing transactions based on date, amount, and type to prevent double-counting.
+            </div>
+            <PrimaryButton label="Got it" onClick={() => setDuplicateWarning(false)} style={{ marginTop: 8, padding: "12px 0", borderRadius: 14, fontSize: 15 }} />
+          </NeoSurface>
+        </div>
+      )}
+
       {showInsights && <InsightsOverlay />}
       {showWidget && <WidgetPreviewModal />}
 

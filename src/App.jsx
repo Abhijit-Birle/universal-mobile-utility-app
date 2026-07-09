@@ -781,6 +781,7 @@ export default function NeoApp() {
   
   // Statement Import State
   const [importReviewData, setImportReviewData] = useState(null);
+  const [updateBankBalance, setUpdateBankBalance] = useState(true);
   const [isImporting, setIsImporting] = useState(false);
   const [importErrorMsg, setImportErrorMsg] = useState("");
   const [duplicateWarning, setDuplicateWarning] = useState(false);
@@ -1767,46 +1768,54 @@ export default function NeoApp() {
 
   /* ---------------------------------- EXPENSE TAB ---------------------------------- */
 
-  const processImportFile = async (file) => {
+  const processImportFiles = async (files) => {
     setShowImportConsent(false);
     setIsImporting(true);
     setImportErrorMsg("");
-    setToastMessage("Processing " + file.name + "...");
+    setToastMessage(`Processing ${files.length} file(s)...`);
     try {
-      let textContent = "";
-      const fileName = file.name.toLowerCase();
-      if (fileName.endsWith('.csv') || fileName.endsWith('.txt')) {
-        textContent = await file.text();
-      } else if (fileName.endsWith('.xls') || fileName.endsWith('.xlsx')) {
-        const data = await file.arrayBuffer();
-        const workbook = XLSX.read(data, { type: 'array' });
-        const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
-        textContent = XLSX.utils.sheet_to_csv(firstSheet);
-      } else {
-        setToastMessage("Unsupported file format. Please upload CSV or Excel.");
-        setIsImporting(false);
-        return;
-      }
-      const prompt = `You are a financial statement parser.\nParse the following bank statement data into a strict JSON object.\nIMPORTANT: Extract EVERY SINGLE transaction. Do not omit, summarize, or skip any transactions, even if there are hundreds.\nFormat: { "bankName": "Name of Bank", "closingBalance": 15000, "transactions": [{ "name": "Description", "amount": 100, "type": "expense" or "income", "date": "YYYY-MM-DD", "category": "Food/Transport/Etc" }] }\nData:\n${textContent.slice(0, 30000)}`;
-      console.log("Calling Gemini API...");
       const ai = new GoogleGenAI({ apiKey });
-      const response = await ai.models.generateContent({ model: 'gemini-2.5-flash', contents: prompt });
-      console.log("Gemini response received:", response);
-      const text = (typeof response.text === 'function' ? response.text() : response.text) || "";
-      let jsonStr = text;
-      const match = text.match(/\{.*\}/s);
-      if (match) jsonStr = match[0];
-      let parsed;
-      try {
-        parsed = JSON.parse(jsonStr);
-      } catch (parseErr) {
-        throw new Error("Could not parse AI response: " + parseErr.message + " | Raw: " + text.substring(0, 200));
+      let allTxs = [];
+      let latestClosingBalance = null;
+      let aggregatedBankName = "";
+
+      for (const file of files) {
+        let textContent = "";
+        const fileName = file.name.toLowerCase();
+        if (fileName.endsWith('.csv') || fileName.endsWith('.txt')) {
+          textContent = await file.text();
+        } else if (fileName.endsWith('.xls') || fileName.endsWith('.xlsx')) {
+          const data = await file.arrayBuffer();
+          const workbook = XLSX.read(data, { type: 'array' });
+          const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+          textContent = XLSX.utils.sheet_to_csv(firstSheet);
+        } else {
+          continue; // Skip unsupported silently in batch
+        }
+
+        const prompt = `You are a financial statement parser.\nParse the following bank statement data into a strict JSON object.\nIMPORTANT: Extract EVERY SINGLE transaction. Do not omit, summarize, or skip any transactions, even if there are hundreds.\nFormat: { "bankName": "Name of Bank", "closingBalance": 15000, "transactions": [{ "name": "Description", "amount": 100, "type": "expense" or "income", "date": "YYYY-MM-DD", "category": "Food/Transport/Etc" }] }\nData:\n${textContent.slice(0, 30000)}`;
+        const response = await ai.models.generateContent({ model: 'gemini-2.5-flash', contents: prompt });
+        const text = (typeof response.text === 'function' ? response.text() : response.text) || "";
+        let jsonStr = text;
+        const match = text.match(/\{.*\}/s);
+        if (match) jsonStr = match[0];
+        
+        try {
+          const parsed = JSON.parse(jsonStr);
+          const txList = Array.isArray(parsed) ? parsed : (parsed.transactions || []);
+          allTxs = [...allTxs, ...txList];
+          
+          if (parsed.bankName) aggregatedBankName = parsed.bankName;
+          // Keep updating closingBalance. The last file parsed will set it.
+          // Ideally they upload files in order. If not, user can uncheck the update balance option later.
+          if (!isNaN(Number(parsed.closingBalance))) latestClosingBalance = Number(parsed.closingBalance);
+        } catch (parseErr) {
+          console.error("Could not parse AI response for file:", file.name, parseErr);
+        }
       }
       
-      const txList = Array.isArray(parsed) ? parsed : (parsed.transactions || []);
-      
-      // Strict Deduplication Check
-      const uniqueNewTxs = txList.filter(newTx => {
+      // Strict Deduplication Check against EXISTING transactions
+      const uniqueNewTxs = allTxs.filter(newTx => {
         const fallbackDate = new Date().toISOString().split('T')[0];
         const newDate = newTx.date || fallbackDate;
         const newType = String(newTx.type || "expense").toLowerCase().includes("income") ? "income" : "expense";
@@ -1820,31 +1829,40 @@ export default function NeoApp() {
         return !isDuplicate;
       });
 
-      if (!uniqueNewTxs || uniqueNewTxs.length === 0) {
+      // Internal Deduplication Check (within the batch itself)
+      const finalTxs = [];
+      uniqueNewTxs.forEach(newTx => {
+        const newDate = newTx.date || new Date().toISOString().split('T')[0];
+        const newType = String(newTx.type || "expense").toLowerCase().includes("income") ? "income" : "expense";
+        const newAmount = Math.abs(Number(newTx.amount) || 0);
+
+        const alreadyInBatch = finalTxs.some(t => t.date === newDate && t.type === newType && t.amount === newAmount);
+        if (!alreadyInBatch) finalTxs.push({ ...newTx, date: newDate, type: newType, amount: newAmount });
+      });
+
+      if (!finalTxs || finalTxs.length === 0) {
         setDuplicateWarning(true);
         setIsImporting(false);
         return;
       }
 
-      const txs = uniqueNewTxs.map(t => {
-        const txType = String(t.type || "expense").toLowerCase().includes("income") ? "income" : "expense";
-        const txAmount = Math.abs(Number(t.amount) || 0);
+      const txs = finalTxs.map(t => {
         return {
           id: "imp_" + Date.now() + "_" + Math.random().toString(36).substring(7),
           name: t.name || t.description || "Imported Tx",
           desc: t.name || t.description || "Imported Tx",
-          category: t.category || (txType === "income" ? "Income" : "Other"),
-          type: txType,
-          amount: txAmount,
-          date: t.date || new Date().toISOString().split('T')[0],
+          category: t.category || (t.type === "income" ? "Income" : "Other"),
+          type: t.type,
+          amount: t.amount,
+          date: t.date,
           time: new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }),
         };
       });
 
       setImportReviewData({
         txs,
-        bankName: parsed.bankName || "",
-        closingBalance: Number(parsed.closingBalance)
+        bankName: aggregatedBankName,
+        closingBalance: latestClosingBalance
       });
     } catch (err) {
       console.error("Import error:", err);
@@ -3713,6 +3731,20 @@ Generate one short, helpful insight about my productivity or finances based ONLY
               {importReviewData.txs.length} new transactions found.
               {importReviewData.bankName && <div style={{ marginTop: 4 }}>Account: <strong>{importReviewData.bankName}</strong></div>}
             </div>
+
+            {importReviewData.closingBalance !== null && (
+              <div style={{ display: "flex", alignItems: "center", gap: 10, background: theme.bg, padding: 12, borderRadius: 12, boxShadow: theme.shadowInset }}>
+                <input 
+                  type="checkbox" 
+                  checked={updateBankBalance} 
+                  onChange={(e) => setUpdateBankBalance(e.target.checked)}
+                  style={{ width: 18, height: 18, accentColor: theme.accent, cursor: "pointer" }}
+                />
+                <div style={{ fontSize: 13, color: theme.textPrimary, ...fontBody }}>
+                  Update bank balance to <strong>{formatCurrency(importReviewData.closingBalance, baseCurrency)}</strong>
+                </div>
+              </div>
+            )}
             
             <div style={{ display: "flex", flexDirection: "column", gap: 8, maxHeight: 300, overflowY: "auto" }}>
               {importReviewData.txs.map((tx, idx) => (
@@ -3746,7 +3778,7 @@ Generate one short, helpful insight about my productivity or finances based ONLY
                     
                     if (isUpi) {
                         targetMethod = 'UPI';
-                        if (!isNaN(closingBalance)) {
+                        if (!isNaN(closingBalance) && updateBankBalance) {
                             setBalances(prev => ({ ...prev, upi: closingBalance }));
                             bankUpdated = true;
                         }
@@ -3754,13 +3786,13 @@ Generate one short, helpful insight about my productivity or finances based ONLY
                         const existingBank = banks.find(b => b.bankName.toLowerCase().includes(normalizedBank) || normalizedBank.includes(b.bankName.toLowerCase()));
                         if (existingBank) {
                             targetMethod = String(existingBank.id);
-                            if (!isNaN(closingBalance)) {
+                            if (!isNaN(closingBalance) && updateBankBalance) {
                                 setBanks(prev => prev.map(b => String(b.id) === targetMethod ? { ...b, balance: closingBalance } : b));
                                 bankUpdated = true;
                             }
                         } else {
                             targetMethod = Date.now().toString();
-                            setBanks(prev => [...prev, { id: targetMethod, bankName: bankName, balance: isNaN(closingBalance) ? 0 : closingBalance, icon: "🏛️" }]);
+                            setBanks(prev => [...prev, { id: targetMethod, bankName: bankName, balance: (!isNaN(closingBalance) && updateBankBalance) ? closingBalance : 0, icon: "🏛️" }]);
                             bankUpdated = true;
                         }
                     }
@@ -3775,17 +3807,21 @@ Generate one short, helpful insight about my productivity or finances based ONLY
                 setLastImportSnapshot({
                   ids: txsToSave.map(t => t.id),
                   method: targetMethod,
-                  balanceDelta: txsToSave.reduce((sum, tx) => sum + (tx.type === 'income' ? tx.amount : -tx.amount), 0),
+                  balanceDelta: updateBankBalance ? 0 : txsToSave.reduce((sum, tx) => sum + (tx.type === 'income' ? tx.amount : -tx.amount), 0),
                   timestamp: Date.now(),
                   count: txsToSave.length,
                 });
                 
-                // If we didn't extract a closing balance to explicitly set the bank's balance, we apply the deltas manually
-                if (!bankUpdated) {
+                // If the user opted not to use the closing balance (unchecked or missing), we apply the deltas manually
+                if (!bankUpdated && updateBankBalance) {
+                   // wait, if updateBankBalance is true but bankUpdated is false (e.g. no closing balance in statement), we apply deltas
                    txsToSave.forEach(tx => {
                      const delta = tx.type === 'income' ? tx.amount : -tx.amount;
                      updateBalanceForMethod(tx.method, delta);
                    });
+                } else if (!updateBankBalance) {
+                   // If user explicitly unchecks it (e.g. historical data), they don't want the bank balance touched at all.
+                   // So we do NOTHING to the balance. It remains as is.
                 }
 
                 setImportedCount(count);
@@ -3838,9 +3874,7 @@ Generate one short, helpful insight about my productivity or finances based ONLY
               <button onClick={() => { setShowImportConsent(false); setPendingImportFiles([]); }} style={{ flex: 1, padding: "12px", borderRadius: 12, border: "none", background: theme.bg, color: theme.textSecondary, boxShadow: theme.shadowRaisedSm, fontWeight: 600, ...fontBody, cursor: "pointer" }}>Cancel</button>
               <button onClick={async () => {
                 setShowImportConsent(false);
-                for (const file of pendingImportFiles) {
-                  await processImportFile(file);
-                }
+                await processImportFiles(pendingImportFiles);
                 setPendingImportFiles([]);
               }} style={{ flex: 1, padding: "12px", borderRadius: 12, border: "none", background: theme.accent, color: "#fff", fontWeight: 700, ...fontBody, cursor: "pointer" }}>Proceed →</button>
             </div>

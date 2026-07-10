@@ -354,22 +354,21 @@ export default function MeditationTimerCard({
                     key={min}
                     onClick={() => { setMeditationDuration(min); setMeditationTimeLeft(min * 60); }}
                     style={{
-                      width: 58, height: 58,
+                      height: 36, padding: '0 16px',
                       background: theme.bg,
                       color: active ? theme.accent : theme.textSecondary,
                       boxShadow: active ? theme.shadowInset : theme.shadowRaisedSm,
-                      border: 'none', borderRadius: 16,
+                      border: 'none', borderRadius: 18,
                       display: 'flex', flexDirection: 'column',
                       alignItems: 'center', justifyContent: 'center',
                       cursor: 'pointer',
                       transition: 'all 0.25s',
-                      outline: active ? `2px solid ${theme.accent}55` : 'none',
+                      outline: active ? `2px solid ${theme.accent}55` : 'none'
                     }}
                   >
-                    <div style={{ fontSize: 18, fontWeight: 700, lineHeight: 1, ...fontDisplay }}>
-                      {String(min).padStart(2, '0')}
+                    <div style={{ fontSize: 13, fontWeight: 700, letterSpacing: 0.5, ...fontDisplay }}>
+                      {String(min).padStart(2, '0')}m
                     </div>
-                    <div style={{ fontSize: 9, marginTop: 3, letterSpacing: '0.05em', ...fontBody }}>min</div>
                   </button>
                 );
               })}

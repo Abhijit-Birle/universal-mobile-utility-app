@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { Play, Pause, ChevronDown, Music } from 'lucide-react';
+import { X, SlidersHorizontal, Play, Pause, RotateCcw, Save, Wind, MoreHorizontal, ChevronsDown, Music, ChevronDown, Leaf } from 'lucide-react';
+import { Haptics, ImpactStyle } from "@capacitor/haptics";
 
 const PHASES = [
-  { label: 'Breathe In…',  duration: 4, kind: 'in'   },
-  { label: 'Hold…',        duration: 7, kind: 'hold'  },
-  { label: 'Breathe out…', duration: 8, kind: 'out'   },
+  { Icon: Wind,         iconStyle: {},                               duration: 4, kind: 'in'   },
+  { Icon: MoreHorizontal, iconStyle: {},                             duration: 7, kind: 'hold' },
+  { Icon: ChevronsDown, iconStyle: { transform: 'rotate(180deg)' }, duration: 8, kind: 'out'  },
 ];
 
 const PHASE_COLORS = {
@@ -53,7 +54,10 @@ export default function BreathingScreen({ onClose, activeSource, musicOptions = 
   const [showPicker, setShowPicker] = useState(false);
 
   const phase  = PHASES[phaseIndex];
-  const colors = PHASE_COLORS[isRunning ? phase.kind : 'hold'];
+  const colors = PHASE_COLORS[phase.kind];
+
+  const CurrentIcon  = isRunning ? phase.Icon : Leaf;
+  const currentStyle = isRunning ? phase.iconStyle : {};
 
   useEffect(() => {
     if (!isRunning) return;
@@ -70,27 +74,21 @@ export default function BreathingScreen({ onClose, activeSource, musicOptions = 
     return () => clearTimeout(id);
   }, [isRunning, count, phaseIndex]);
 
-  // Progress 0→1 within the current phase
+  // The target scale of the orb. We let CSS 'transition' handle the smooth interpolation over time.
   let orbScale = 0.12; // resting small
   if (isRunning) {
-    if (phase.kind === 'in') {
-      const prog = (PHASES[0].duration - count) / Math.max(1, PHASES[0].duration);
-      orbScale = 0.12 + prog * 0.88; // 0.12 → 1.0
-    } else if (phase.kind === 'hold') {
+    if (phase.kind === 'in' || phase.kind === 'hold') {
       orbScale = 1.0; // fully expanded
     } else if (phase.kind === 'out') {
-      const prog = count / Math.max(1, PHASES[2].duration);
-      orbScale = 0.12 + prog * 0.88; // 1.0 → 0.12
+      orbScale = 0.12; // resting small
     }
   }
 
-  // At scale=1 the orb is ORB_BASE px. We need it to cover ~200vw at full.
-  // So the "full screen" scale factor = viewport diagonal / ORB_BASE ≈ 1600/120 ≈ 13.3
-  const fullScreenScale = orbScale * 13.5;
+  // Max diameter = 120 * 2.5 = 300px (fits nicely on mobile screens)
+  const fullScreenScale = orbScale * 2.5;
 
   const mins = Math.floor(elapsed / 60);
   const secs = elapsed % 60;
-  const currentLabel = isRunning ? phase.label : 'Paused';
   const currentSound = (musicOptions.find(m => m.id === activeSource) || {}).label || activeSource || 'Ambient';
 
   const btnShadow = isRunning
@@ -117,26 +115,27 @@ export default function BreathingScreen({ onClose, activeSource, musicOptions = 
         top: '50%', left: '50%',
         width: ORB_BASE, height: ORB_BASE,
         borderRadius: '50%',
-        background: `radial-gradient(circle at 35% 35%, ${colors.orbGlow}, ${colors.orb} 60%, ${colors.dark} 100%)`,
-        transform: `translate(-50%, -50%) scale(${fullScreenScale})`,
-        transition: `transform ${transitionDuration} linear, background 1.2s ease`,
+        backgroundColor: colors.orb,
+        transform: `translate3d(-50%, -50%, 0) scale(${fullScreenScale})`,
+        transition: `transform ${transitionDuration} linear, background-color 1.2s ease`,
+        willChange: 'transform, background-color',
         pointerEvents: 'none',
-        opacity: 0.92,
+        opacity: 0.95,
       }} />
 
-      {/* Multiple concentric layers for depth */}
-      {[1.04, 1.15, 1.3, 1.5, 1.8].map((multiplier, i) => (
+      {/* Optimized concentric layers (reduced from 5 to 2) */}
+      {[1.2, 1.5].map((multiplier, i) => (
         <div key={i} style={{
           position: 'absolute',
           top: '50%', left: '50%',
-          width: ORB_BASE + (i * 30), height: ORB_BASE + (i * 30),
+          width: ORB_BASE + (i * 40), height: ORB_BASE + (i * 40),
           borderRadius: '50%',
-          background: i === 0 ? `${colors.orbGlow}22` : i % 2 !== 0 ? `${colors.orbGlow}0a` : 'transparent',
-          border: `1px solid ${colors.orbGlow}${Math.max(10, 44 - i * 8).toString(16)}`,
-          transform: `translate(-50%, -50%) scale(${fullScreenScale * multiplier})`,
-          transition: `transform ${transitionDuration} linear, background 1.2s ease, border-color 1.2s ease`,
+          backgroundColor: i === 0 ? `${colors.orbGlow}22` : 'transparent',
+          border: `1px solid ${colors.orbGlow}${i === 0 ? '44' : '22'}`,
+          transform: `translate3d(-50%, -50%, 0) scale(${fullScreenScale * multiplier})`,
+          transition: `transform ${transitionDuration} linear, background-color 1.2s ease, border-color 1.2s ease`,
+          willChange: 'transform',
           pointerEvents: 'none',
-          boxShadow: i === 1 ? `0 0 40px ${colors.orbGlow}33` : 'none',
         }} />
       ))}
 
@@ -211,14 +210,18 @@ export default function BreathingScreen({ onClose, activeSource, musicOptions = 
           alignItems: 'center', justifyContent: 'center',
           pointerEvents: 'none',
         }}>
+          {/* Minimalist icon without circle */}
           <div style={{
-            fontSize: 28, fontWeight: 600,
-            color: '#ffffff',
-            fontFamily: 'Poppins, sans-serif',
-            textShadow: '0 2px 16px rgba(0,0,0,0.5)',
-            letterSpacing: '-0.3px',
-            transition: 'opacity 0.5s',
-          }}>{currentLabel}</div>
+            opacity: 0.8,
+            filter: 'drop-shadow(0 2px 10px rgba(0,0,0,0.3))',
+            transition: 'opacity 0.5s ease',
+            marginBottom: 10,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center'
+          }}>
+            <CurrentIcon size={48} color="#ffffff" style={{ transition: 'all 0.5s ease', ...currentStyle }} />
+          </div>
 
           <div style={{
             marginTop: 10, fontSize: 15,
@@ -231,7 +234,10 @@ export default function BreathingScreen({ onClose, activeSource, musicOptions = 
         {/* Bottom: play/pause button */}
         <div style={{ flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 20 }}>
           <button
-            onClick={() => setIsRunning(r => !r)}
+            onClick={() => {
+              try { Haptics.impact({ style: ImpactStyle.Light }); } catch(e) {}
+              setIsRunning(r => !r);
+            }}
             style={{
               width: 64, height: 64, borderRadius: '50%',
               background: 'rgba(28,28,34,0.75)',

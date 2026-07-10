@@ -4,7 +4,8 @@ import { useTodos, generateId } from '../hooks/useTodos.js';
 
 import { getLocalDateString } from '../utils/date.js';
 import { AreaChart, Area, ResponsiveContainer, YAxis } from 'recharts';
-import { Flame, Check, ChevronLeft, ChevronRight, Upload, Plus, Play, Pause, RotateCcw, ArrowUp } from 'lucide-react';
+import { Flame, Check, ChevronLeft, ChevronRight, Upload, Plus, Play, Pause, RotateCcw, ArrowUp, X, User } from 'lucide-react';
+import { Haptics, ImpactStyle } from "@capacitor/haptics";
 import Strands from '../components/Strands.jsx';
 import WheelPicker from '../components/ui/WheelPicker.jsx';
 import LiquidWave from '../components/ui/LiquidWave.jsx';
@@ -98,9 +99,9 @@ function SummaryFocusTimer({ theme, fontDisplay, fontBody, timerState, liveRemai
     return { p1, p2, isMajor, angle };
   });
 
-  const handleStart = (e) => { e.stopPropagation(); startTimer(); };
-  const handlePause = (e) => { e.stopPropagation(); pauseTimer(liveRemaining); };
-  const handleStop = (e) => { e.stopPropagation(); stopTimer(); };
+  const handleStart = (e) => { e.stopPropagation(); try { Haptics.impact({ style: ImpactStyle.Light }); } catch(err) {} startTimer(); };
+  const handlePause = (e) => { e.stopPropagation(); try { Haptics.impact({ style: ImpactStyle.Light }); } catch(err) {} pauseTimer(liveRemaining); };
+  const handleStop = (e) => { e.stopPropagation(); try { Haptics.impact({ style: ImpactStyle.Light }); } catch(err) {} stopTimer(); };
   
   const setPreset = (mins, e) => {
     if (e) e.stopPropagation();
@@ -203,16 +204,16 @@ function SummaryFocusTimer({ theme, fontDisplay, fontBody, timerState, liveRemai
                 const active = (timerState.durationSeconds === min * 60);
                 return (
                   <button key={min} onClick={(e) => setPreset(min, e)} style={{ 
-                    width: 38, height: 38,
+                    height: 28, padding: '0 12px',
                     background: theme.bg, color: active ? theme.accent : theme.textSecondary,
                     boxShadow: active ? theme.shadowInset : theme.shadowRaisedSm,
-                    border: 'none', borderRadius: 10, display: 'flex', flexDirection: 'column',
+                    border: 'none', borderRadius: 14, display: 'flex', flexDirection: 'column',
                     alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
                     outline: active ? `2px solid ${theme.accent}55` : 'none',
                     transition: 'all 0.25s'
                   }}>
-                    <div style={{ fontSize: 13, fontWeight: 700, lineHeight: 1, ...fontDisplay }}>
-                      {String(min).padStart(2, '0')}
+                    <div style={{ fontSize: 12, fontWeight: 700, lineHeight: 1, ...fontDisplay }}>
+                      {String(min).padStart(2, '0')}m
                     </div>
                   </button>
                 );
@@ -223,9 +224,9 @@ function SummaryFocusTimer({ theme, fontDisplay, fontBody, timerState, liveRemai
                 setCustomMins(Math.floor((timerState.durationSeconds % 3600) / 60));
                 setShowCustom(true); 
               }} style={{ 
-                width: 38, height: 38,
+                height: 28, padding: '0 12px',
                 background: theme.bg, color: theme.textSecondary,
-                boxShadow: theme.shadowRaisedSm, border: 'none', borderRadius: 10, 
+                boxShadow: theme.shadowRaisedSm, border: 'none', borderRadius: 14, 
                 display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', 
                 cursor: 'pointer', transition: 'all 0.25s'
               }}>

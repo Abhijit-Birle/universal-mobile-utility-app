@@ -167,3 +167,7 @@ input[type="date"], input[type="time"], input[type="datetime-local"] {
   position: relative;
   cursor: pointer;
 }
+
+* {
+  -webkit-tap-highlight-color: transparent;
+}

@@ -1,10 +1,17 @@
 import { useState, useEffect, useRef } from 'react';
-import { useTodos } from '../hooks/useTodos.js';
-import { useMoodTracker } from '../hooks/useMoodTracker.js';
-import { useFocusTimer } from '../hooks/useFocusTimer.js';
+import { useTodos, generateId } from '../hooks/useTodos.js';
+
+
 import { getLocalDateString } from '../utils/date.js';
 import { AreaChart, Area, ResponsiveContainer, YAxis } from 'recharts';
-import { Flame, Check, ChevronLeft, ChevronRight, Upload, Plus } from 'lucide-react';
+import { Flame, Check, ChevronLeft, ChevronRight, Upload, Plus, Play, Pause, RotateCcw, ArrowUp } from 'lucide-react';
+import Strands from '../components/Strands.jsx';
+import WheelPicker from '../components/ui/WheelPicker.jsx';
+import LiquidWave from '../components/ui/LiquidWave.jsx';
+import Icon from '../components/ui/Icon.jsx';
+import DatePicker from '../components/ui/DatePicker.jsx';
+import TimePicker from '../components/ui/TimePicker.jsx';
+import ReminderPicker from '../components/ui/ReminderPicker.jsx';
 
 const fmt = (n) => `₹${Math.abs(n).toLocaleString('en-IN', { maximumFractionDigits: 0 })}`;
 const pad = (n) => String(n).padStart(2, '0');
@@ -16,47 +23,282 @@ function greeting() {
   return 'Good evening';
 }
 
-// ponytail: circular progress — pure inline SVG, no dependency
-function MiniTimer({ remainingSeconds, durationSeconds, isRunning, onNavigate }) {
-  const pct = durationSeconds > 0 ? remainingSeconds / durationSeconds : 1;
-  const r = 28;
-  const circ = 2 * Math.PI * r;
-  const dash = circ * pct;
-  const mins = Math.floor(remainingSeconds / 60);
-  const secs = remainingSeconds % 60;
+function hexToRgb(hex) {
+  const shorthandRegex = /^#?([a-f\d])([a-f\d])([a-f\d])$/i;
+  hex = hex.replace(shorthandRegex, (m, r, g, b) => r + r + g + g + b + b);
+  const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+  return result ? [parseInt(result[1], 16), parseInt(result[2], 16), parseInt(result[3], 16)] : [0, 0, 0];
+}
+
+function interpolateRgb(color1, color2, factor) {
+  const c1 = hexToRgb(color1);
+  const c2 = hexToRgb(color2);
+  const r = Math.round(c1[0] + factor * (c2[0] - c1[0]));
+  const g = Math.round(c1[1] + factor * (c2[1] - c1[1]));
+  const b = Math.round(c1[2] + factor * (c2[2] - c1[2]));
+  return `rgb(${r}, ${g}, ${b})`;
+}
+
+function polarToXY(cx, cy, r, angleDeg) {
+  const rad = (angleDeg - 90) * (Math.PI / 180);
+  return {
+    x: cx + r * Math.cos(rad),
+    y: cy + r * Math.sin(rad),
+  };
+}
+
+// ponytail: interactive focus timer for Summary
+function SummaryFocusTimer({ theme, fontDisplay, fontBody, timerState, liveRemaining, setDuration, startTimer, pauseTimer, stopTimer, onNavigate, addTime }) {
+  const [showCustom, setShowCustom] = useState(false);
+  const [customHours, setCustomHours] = useState(0);
+  const [customMins, setCustomMins] = useState(0);
+
+  const isRunning = timerState.isRunning;
+  const isPaused = !isRunning && liveRemaining < timerState.durationSeconds && liveRemaining > 0;
+  
+  const totalSeconds = timerState.durationSeconds || 1;
+  const progress = isRunning || isPaused ? (totalSeconds - liveRemaining) / totalSeconds : 1;
+  
+  const CX = 145, CY = 145;
+  const R_OUTER = 112;
+  const R_NEEDLE = 82;
+  const TICK_COUNT = 60;
+  
+  const circumference = 2 * Math.PI * R_OUTER;
+  const strokeDashoffset = circumference * (1 - progress);
+  const needleAngle = progress * 360;
+  const needleTip = polarToXY(CX, CY, R_NEEDLE, needleAngle);
+  
+  const isDark = theme.bg.includes('1c') || theme.bg.includes('22') || theme.bg.includes('1e') || theme.bg.includes('2b');
+  const trackColor = isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.05)';
+  const tickDimColor = isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)';
+  const lightShadow = isDark ? 'rgba(255,255,255,0.02)' : 'rgba(255,255,255,0.4)';
+  const darkShadow = isDark ? 'rgba(0,0,0,0.5)' : 'rgba(0,0,0,0.15)';
+  
+  let dynamicColor = theme.accent;
+  if (isRunning || isPaused) {
+    const remainingRatio = liveRemaining / totalSeconds;
+    if (remainingRatio > 0.5) {
+      const factor = (1 - remainingRatio) * 2;
+      dynamicColor = interpolateRgb(theme.accent, '#F59E0B', factor);
+    } else {
+      const factor = (0.5 - remainingRatio) * 2;
+      dynamicColor = interpolateRgb('#F59E0B', '#EF4444', factor);
+    }
+  }
+  const tickLitColor = dynamicColor;
+
+  const ticks = Array.from({ length: TICK_COUNT }, (_, i) => {
+    const angle = (i / TICK_COUNT) * 360;
+    const isMajor = i % 5 === 0;
+    const r1 = R_OUTER + (isMajor ? 14 : 9);
+    const r2 = R_OUTER + (isMajor ? 22 : 16);
+    const p1 = polarToXY(CX, CY, r1, angle);
+    const p2 = polarToXY(CX, CY, r2, angle);
+    return { p1, p2, isMajor, angle };
+  });
+
+  const handleStart = (e) => { e.stopPropagation(); startTimer(); };
+  const handlePause = (e) => { e.stopPropagation(); pauseTimer(liveRemaining); };
+  const handleStop = (e) => { e.stopPropagation(); stopTimer(); };
+  
+  const setPreset = (mins, e) => {
+    if (e) e.stopPropagation();
+    setShowCustom(false);
+    setDuration(mins * 60);
+  };
+  const handleSetCustom = (e) => {
+    e.stopPropagation();
+    setShowCustom(false);
+    setDuration(customHours * 3600 + customMins * 60);
+  };
+
+  const formatTime = (s) => {
+    const hrs = Math.floor(s / 3600);
+    const mins = Math.floor((s % 3600) / 60);
+    const secs = s % 60;
+    if (hrs > 0) return `${hrs}:${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+    return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+  };
 
   return (
-    <div onClick={onNavigate} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', cursor: 'pointer', gap: 6 }}>
-      <svg width={72} height={72} style={{ transform: 'rotate(-90deg)' }}>
-        <circle cx={36} cy={36} r={r} fill="none" stroke="rgba(46,204,156,0.15)" strokeWidth={5} />
-        <circle
-          cx={36} cy={36} r={r} fill="none"
-          stroke="#2ecc9c" strokeWidth={5}
-          strokeDasharray={`${dash} ${circ}`}
-          strokeLinecap="round"
-          style={{ transition: 'stroke-dasharray 1s linear' }}
-        />
-      </svg>
-      <div style={{ position: 'absolute', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-        <span style={{ fontSize: 13, fontWeight: 700, color: '#2ecc9c', letterSpacing: '-0.5px', marginTop: 26 }}>
-          {pad(mins)}:{pad(secs)}
-        </span>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 16, width: '100%', padding: '4px 0' }}>
+      
+      {/* LEFT: Timer Circle */}
+      <div 
+        onClick={onNavigate}
+        style={{ position: 'relative', width: 100, height: 100, flexShrink: 0, cursor: 'pointer' }}
+      >
+        <div style={{ position: 'absolute', top: 0, left: 0, width: 290, height: 290, transform: 'scale(0.3448)', transformOrigin: 'top left' }}>
+           <svg width="100%" height="100%" viewBox="0 0 290 290" style={{ position: 'absolute', top: 0, left: 0 }}>
+             {/* === Layer 0 — tick ring (outermost) === */}
+             {ticks.map((t, i) => {
+               const lit = progress > 0 && (i / TICK_COUNT) <= progress;
+               return (
+                 <line key={i} x1={t.p1.x} y1={t.p1.y} x2={t.p2.x} y2={t.p2.y} stroke={lit ? tickLitColor : tickDimColor} strokeWidth={t.isMajor ? 2.5 : 1.5} strokeLinecap="round" style={{ transition: 'stroke 1s linear' }} />
+               );
+             })}
+
+             {/* === Layer 1 — track ring === */}
+             <circle cx={CX} cy={CY} r={R_OUTER} fill="none" stroke={trackColor} strokeWidth={14} />
+
+             {/* === Layer 2 — progress arc (glowing) === */}
+             <circle cx={CX} cy={CY} r={R_OUTER} fill="none" stroke={dynamicColor} strokeWidth={14} strokeLinecap="round" strokeDasharray={circumference} strokeDashoffset={strokeDashoffset} transform={`rotate(-90 ${CX} ${CY})`} style={{ transition: 'stroke-dashoffset 1s linear, stroke 1s linear, filter 1s linear', filter: `drop-shadow(0 0 6px ${dynamicColor}80)` }} />
+
+             {/* === Layer 3 — outer recessed circle === */}
+             <circle cx={CX} cy={CY} r={R_OUTER - 18} fill={theme.bg} style={{ filter: `drop-shadow(2px 2px 5px ${darkShadow}) drop-shadow(-2px -2px 5px ${lightShadow})` }} />
+
+             {/* === Layer 4 — middle raised platform === */}
+             <circle cx={CX} cy={CY} r={72} fill={theme.bg} style={{ filter: `drop-shadow(-3px -3px 6px ${lightShadow}) drop-shadow(3px 3px 6px ${darkShadow})` }} />
+
+             {/* === Layer 5 — innermost recessed center === */}
+             <circle cx={CX} cy={CY} r={54} fill={theme.bg} style={{ filter: `drop-shadow(inset 2px 2px 5px ${darkShadow}) drop-shadow(inset -2px -2px 5px ${lightShadow})` }} />
+
+             {/* === Needle === */}
+             {(isRunning || isPaused) && (
+               <>
+                 <line x1={CX + 1} y1={CY + 1} x2={needleTip.x + 1} y2={needleTip.y + 1} stroke={darkShadow} strokeWidth={3} strokeLinecap="round" />
+                 <line x1={CX} y1={CY} x2={needleTip.x} y2={needleTip.y} stroke={dynamicColor} strokeWidth={2.5} strokeLinecap="round" style={{ transition: 'x2 1s linear, y2 1s linear, stroke 1s linear' }} />
+                 <circle cx={CX} cy={CY} r={5} fill={dynamicColor} style={{ transition: 'fill 1s linear' }} />
+                 <circle cx={CX} cy={CY} r={2.5} fill={isDark ? 'rgba(255,255,255,0.25)' : 'rgba(255,255,255,0.8)'} />
+                 <circle cx={needleTip.x} cy={needleTip.y} r={5} fill={dynamicColor} style={{ filter: `drop-shadow(0 0 4px ${dynamicColor})`, transition: 'cx 1s linear, cy 1s linear, fill 1s linear, filter 1s linear' }} />
+               </>
+             )}
+           </svg>
+
+           {/* Dynamic Liquid Wave Visualization */}
+           {(isRunning || isPaused) && (
+             <div style={{ position: 'absolute', top: CY - 54, left: CX - 54, width: 108, height: 108, borderRadius: '50%', overflow: 'hidden', pointerEvents: 'none' }}>
+               <LiquidWave progress={progress} color={dynamicColor} backgroundColor={theme.bg} size={108} />
+             </div>
+           )}
+
+           <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', textAlign: 'center', pointerEvents: 'none' }}>
+             <div style={{ fontSize: 36, fontWeight: 700, color: theme.textPrimary, letterSpacing: '-0.5px', ...fontDisplay }}>
+               {formatTime(liveRemaining)}
+             </div>
+             <div style={{ fontSize: 16, fontWeight: 700, color: theme.textSecondary, textTransform: 'uppercase', marginTop: 4, ...fontBody }}>
+               {isRunning ? 'remaining' : 'set time'}
+             </div>
+           </div>
+        </div>
       </div>
-      <span style={{ fontSize: 11, color: 'rgba(0,0,0,0.45)', fontWeight: 500 }}>
-        {isRunning ? '● Focusing' : 'Tap to focus'}
-      </span>
+
+      {/* RIGHT: Controls */}
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 12, alignItems: 'center' }}>
+        {!isRunning && (
+          showCustom ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12, alignItems: 'center' }}>
+               <div style={{ height: 90, display: 'flex', gap: 16, background: theme.surface, borderRadius: 16, padding: '4px 16px', boxShadow: `inset 2px 2px 5px ${darkShadow}, inset -2px -2px 5px ${lightShadow}` }}>
+                 <WheelPicker options={Array.from({length:13},(_,i)=>i)} value={customHours} onChange={setCustomHours} label="h" theme={theme} itemHeight={28} fontSize={16} />
+                 <WheelPicker options={Array.from({length:60},(_,i)=>i)} value={customMins} onChange={setCustomMins} label="m" theme={theme} itemHeight={28} fontSize={16} />
+               </div>
+               <button onClick={handleSetCustom} style={{ padding: '6px 20px', borderRadius: 12, background: theme.accent, color: '#fff', border: 'none', fontWeight: 600, ...fontBody, cursor: 'pointer' }}>
+                 Set
+               </button>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', justifyContent: 'center' }}>
+              {[5, 10, 15, 20].map(min => {
+                const active = (timerState.durationSeconds === min * 60);
+                return (
+                  <button key={min} onClick={(e) => setPreset(min, e)} style={{ 
+                    width: 38, height: 38,
+                    background: theme.bg, color: active ? theme.accent : theme.textSecondary,
+                    boxShadow: active ? theme.shadowInset : theme.shadowRaisedSm,
+                    border: 'none', borderRadius: 10, display: 'flex', flexDirection: 'column',
+                    alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
+                    outline: active ? `2px solid ${theme.accent}55` : 'none',
+                    transition: 'all 0.25s'
+                  }}>
+                    <div style={{ fontSize: 13, fontWeight: 700, lineHeight: 1, ...fontDisplay }}>
+                      {String(min).padStart(2, '0')}
+                    </div>
+                  </button>
+                );
+              })}
+              <button onClick={(e) => { 
+                e.stopPropagation(); 
+                setCustomHours(Math.floor(timerState.durationSeconds / 3600));
+                setCustomMins(Math.floor((timerState.durationSeconds % 3600) / 60));
+                setShowCustom(true); 
+              }} style={{ 
+                width: 38, height: 38,
+                background: theme.bg, color: theme.textSecondary,
+                boxShadow: theme.shadowRaisedSm, border: 'none', borderRadius: 10, 
+                display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', 
+                cursor: 'pointer', transition: 'all 0.25s'
+              }}>
+                <div style={{ fontSize: 12, fontWeight: 700, ...fontBody }}>...</div>
+              </button>
+            </div>
+          )
+        )}
+        {liveRemaining <= 15 && liveRemaining > 0 && timerState.isRunning && (
+          <div style={{ display: 'flex', justifyContent: 'center', gap: 12, marginBottom: 4 }}>
+            <button
+              onClick={(e) => { e.stopPropagation(); if (addTime) addTime(60); }}
+              style={{
+                background: theme.bg, border: "none", color: theme.textSecondary,
+                padding: "6px 14px", borderRadius: 12, boxShadow: theme.shadowRaisedSm,
+                fontSize: 12, fontWeight: 700, cursor: "pointer", ...fontBody
+              }}
+            >
+              +1 min
+            </button>
+            <button
+              onClick={(e) => { e.stopPropagation(); if (addTime) addTime(300); }}
+              style={{
+                background: theme.bg, border: "none", color: theme.textSecondary,
+                padding: "6px 14px", borderRadius: 12, boxShadow: theme.shadowRaisedSm,
+                fontSize: 12, fontWeight: 700, cursor: "pointer", ...fontBody
+              }}
+            >
+              +5 min
+            </button>
+          </div>
+        )}
+        
+        <div style={{ display: 'flex', justifyContent: 'center', gap: 12 }}>
+          {isPaused && (
+             <button onClick={handleStop} style={{ 
+               width: 36, height: 36, borderRadius: '50%', background: theme.bg, 
+               boxShadow: theme.shadowRaisedSm, border: 'none', color: theme.textSecondary, 
+               display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' 
+             }}>
+                <RotateCcw size={16} />
+             </button>
+          )}
+          {(!isRunning || isPaused || isRunning) && !showCustom && (
+             <button onClick={isRunning ? handlePause : handleStart} style={{ 
+               width: 44, height: 44, borderRadius: '50%', 
+               background: isRunning ? theme.bg : theme.accent, 
+               boxShadow: isRunning ? theme.shadowInset : `0 4px 12px ${theme.accent}70, 0 2px 4px ${theme.accent}50`, 
+               border: 'none', color: isRunning ? theme.accent : '#fff', 
+               display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', transition: 'all 0.25s' 
+             }}>
+               {isRunning ? <Pause size={18} /> : <Play size={18} style={{ marginLeft: 3 }} />}
+             </button>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
 
-export default function SummaryTab({ theme, NeoSurface, NeoInput, fontDisplay, fontBody, onNavigate, transactions = [], streak = 0, activeDays = [], monthlyActiveCount = 0, daysInMonth = 30, yearlyActiveCount = 0, daysInYear = 365, onShowForm, isImporting, onImportStatement }) {
+export default function SummaryTab({ theme, NeoSurface, NeoInput, fontDisplay, fontBody, onNavigate, transactions = [], streak = 0, activeDays = [], monthlyActiveCount = 0, daysInMonth = 30, yearlyActiveCount = 0, daysInYear = 365, onShowForm, isImporting, onImportStatement, totalBudget = 0, focusTimer }) {
   const { todos, toggleDone, addTodo } = useTodos();
-  const { timerState } = useFocusTimer();
-  const { moodLogs, addLog: logMood } = useMoodTracker();
+  const { timerState, setDuration, startTimer, pauseTimer, stopTimer } = focusTimer;
+
   const [showMonthly, setShowMonthly] = useState(false);
   const [viewMonthDate, setViewMonthDate] = useState(new Date());
   const [magicText, setMagicText] = useState('');
   const [newTaskText, setNewTaskText] = useState('');
+  const [showQuickAddExtras, setShowQuickAddExtras] = useState(false);
+  const [quickAddDue, setQuickAddDue] = useState('');
+  const [quickAddDueTime, setQuickAddDueTime] = useState('');
+  const [quickAddReminder, setQuickAddReminder] = useState('');
+  const [quickAddSubtasks, setQuickAddSubtasks] = useState([]);
   const inputRef = useRef(null);
   
   const today = getLocalDateString();
@@ -72,10 +314,14 @@ export default function SummaryTab({ theme, NeoSurface, NeoInput, fontDisplay, f
   const now = new Date();
   const monthSpend = expenseList
     .filter(e => {
-      const d = (e.date === 'Today') ? new Date() : new Date(e.date);
-      return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
+      if (e.date === 'Today' || e.date === today) return true;
+      const d = new Date(e.date);
+      return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
     })
     .reduce((sum, e) => sum + Number(e.amount), 0);
+
+  const daysLeft = Math.max(1, daysInMonth - now.getDate() + 1);
+  const safeToSpend = Math.max(0, Math.floor((totalBudget - monthSpend) / daysLeft));
 
   // Last 7 days chart data
   const last7Days = Array.from({ length: 7 }).map((_, i) => {
@@ -103,21 +349,7 @@ export default function SummaryTab({ theme, NeoSurface, NeoInput, fontDisplay, f
     .sort((a, b) => (b.important ? 1 : 0) - (a.important ? 1 : 0))
     .slice(0, 3);
 
-  // Timer live countdown (recalculate remaining if running)
-  const [liveRemaining, setLiveRemaining] = useState(timerState.remainingSeconds);
-  useEffect(() => {
-    if (!timerState.isRunning || !timerState.endTime) {
-      setLiveRemaining(timerState.remainingSeconds);
-      return;
-    }
-    const tick = () => {
-      const r = Math.max(0, Math.round((timerState.endTime - Date.now()) / 1000));
-      setLiveRemaining(r);
-    };
-    tick();
-    const id = setInterval(tick, 1000);
-    return () => clearInterval(id);
-  }, [timerState.isRunning, timerState.endTime, timerState.remainingSeconds]);
+  // Timer live countdown is handled by App.jsx passing down timerState.remainingSeconds
 
   const handleMagicSubmit = (e) => {
     e.preventDefault();
@@ -179,6 +411,11 @@ export default function SummaryTab({ theme, NeoSurface, NeoInput, fontDisplay, f
         {/* Right Column: Progress & Strip */}
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
           
+          {/* Label */}
+          <div style={{ fontSize: 13, fontWeight: 700, color: theme.textPrimary, ...fontBody, marginBottom: 4 }}>
+            Daily check-in
+          </div>
+          
           {/* Monthly Progress Row */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
             <div style={{ display: 'flex', alignItems: 'baseline', gap: 4, minWidth: 50 }}>
@@ -229,35 +466,7 @@ export default function SummaryTab({ theme, NeoSurface, NeoInput, fontDisplay, f
         </div>
       </NeoSurface>
 
-      {/* Mood Tracker */}
-      <div style={{ ...card, marginTop: 16 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-          <span style={{ fontWeight: 600, color: theme.textPrimary, fontSize: 14 }}>How are you feeling?</span>
-        </div>
-        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-          {['😠', '😔', '😐', '🙂', '🤩'].map((emoji, index) => {
-            const score = index + 1;
-            const isSelected = moodLogs[today] === score;
-            return (
-              <NeoSurface
-                key={score}
-                pressed={isSelected}
-                onClick={() => logMood(today, score)}
-                style={{
-                  width: 46, height: 46, borderRadius: '50%',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  fontSize: 24, cursor: 'pointer',
-                  transition: 'all 0.2s',
-                  transform: isSelected ? 'scale(1.05)' : 'scale(1)',
-                  filter: !isSelected && moodLogs[today] ? 'grayscale(100%) opacity(0.5)' : 'none'
-                }}
-              >
-                {emoji}
-              </NeoSurface>
-            );
-          })}
-        </div>
-      </div>
+
 
       {/* Financial Snapshot */}
       <NeoSurface 
@@ -291,8 +500,10 @@ export default function SummaryTab({ theme, NeoSurface, NeoInput, fontDisplay, f
 
         <div style={{ display: 'flex', gap: 16 }}>
           <div style={{ flex: 1, textAlign: 'center' }}>
-            <div style={{ fontSize: 22, fontWeight: 700, color: theme.textPrimary, ...fontDisplay }}>{fmt(todaySpend)}</div>
-            <div style={{ fontSize: 11, color: theme.textSecondary, marginTop: 2, ...fontBody }}>Today's Spend</div>
+            <div style={{ fontSize: 22, fontWeight: 700, color: theme.textPrimary, ...fontDisplay }}>{fmt(totalBudget > 0 ? safeToSpend : todaySpend)}</div>
+            <div style={{ fontSize: 11, color: theme.textSecondary, marginTop: 2, ...fontBody }}>
+              {totalBudget > 0 ? 'Safe to spend/day' : 'Today\'s Spend'}
+            </div>
           </div>
           <div style={{ width: 1, background: theme.border }} />
           <div style={{ flex: 1, textAlign: 'center' }}>
@@ -324,7 +535,9 @@ export default function SummaryTab({ theme, NeoSurface, NeoInput, fontDisplay, f
           >
             {!isImporting && <input type="file" accept=".csv,.txt,.xls,.xlsx" multiple onChange={onImportStatement} style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", opacity: 0, cursor: "pointer", zIndex: 10 }} title="Import Statement" />}
             {isImporting ? (
-              <div style={{ fontSize: 10, color: theme.textSecondary }}>...</div>
+              <div style={{ position: "relative", zIndex: 1, width: 24, height: 24, display: "flex", alignItems: "center", justifyContent: "center", borderRadius: "50%", overflow: "hidden" }}>
+                <Strands colors={["#F97316","#7C3AED","#06B6D4"]} count={4} speed={1.7} amplitude={2.1} waviness={1.6} thickness={0.7} glow={2.6} taper={3} spread={1} intensity={0.7} saturation={1.5} opacity={1} scale={1.3} glass refraction={1.35} dispersion={1} glassSize={1} hueShift={0.26} />
+              </div>
             ) : (
               <Upload size={18} strokeWidth={2.5} style={{ position: "relative", zIndex: 1 }} />
             )}
@@ -340,7 +553,10 @@ export default function SummaryTab({ theme, NeoSurface, NeoInput, fontDisplay, f
       </NeoSurface>
 
       {/* My Day Tasks */}
-      <div style={card}>
+      <div 
+        style={{ ...card, cursor: 'pointer', display: 'flex', flexDirection: 'column' }}
+        onClick={() => onNavigate('todo')}
+      >
         <div style={label}>My Day</div>
         {taskList.length === 0 ? (
           <div style={{ color: theme.textSecondary, fontSize: 13, textAlign: 'center', padding: '12px 0', ...fontBody }}>
@@ -351,7 +567,7 @@ export default function SummaryTab({ theme, NeoSurface, NeoInput, fontDisplay, f
             {taskList.map(task => (
               <div key={task.id} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                 <button
-                  onClick={() => toggleDone(task.id)}
+                  onClick={(e) => { e.stopPropagation(); toggleDone(task.id); }}
                   style={{
                     width: 22, height: 22, borderRadius: '50%', border: `2px solid ${theme.accent}`,
                     background: task.done ? theme.accent : 'transparent',
@@ -374,53 +590,131 @@ export default function SummaryTab({ theme, NeoSurface, NeoInput, fontDisplay, f
         )}
 
         {/* Quick Add Task */}
-        <form onSubmit={(e) => {
-          e.preventDefault();
-          if (newTaskText.trim()) {
-            addTodo({ text: newTaskText.trim(), myDayDate: today });
-            setNewTaskText('');
-          }
-        }} style={{ marginTop: 14, display: 'flex', gap: 10 }}>
-          <NeoInput 
-            value={newTaskText}
-            onChange={(e) => setNewTaskText(e.target.value)}
-            placeholder="Add a task for today..."
-            style={{ flex: 1, padding: '8px 12px', fontSize: 13 }}
-          />
-          <button 
-            type="submit" 
-            disabled={!newTaskText.trim()}
-            style={{ 
-              background: newTaskText.trim() ? theme.accent : theme.border, 
-              color: '#fff', border: 'none', borderRadius: 10, 
-              padding: '0 12px', cursor: newTaskText.trim() ? 'pointer' : 'default', 
-              fontWeight: 600, fontSize: 13, transition: 'background 0.2s'
-            }}
-          >
-            Add
-          </button>
-        </form>
-
-        <button
-          onClick={() => onNavigate('todo')}
-          style={{
-            marginTop: 14, width: '100%', background: 'transparent', border: 'none',
-            color: theme.accent, fontSize: 12, fontWeight: 600, cursor: 'pointer', ...fontBody,
-          }}
-        >
-          View All Tasks →
-        </button>
+        <div onClick={(e) => e.stopPropagation()} style={{ marginTop: 14 }}>
+          {showQuickAddExtras && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 12 }}>
+              <div style={{ display: 'flex', gap: 12 }}>
+                <NeoSurface pressed style={{ flex: 1, padding: '10px 14px', borderRadius: 14, display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <DatePicker
+                    value={quickAddDue}
+                    onChange={setQuickAddDue}
+                    theme={theme}
+                    fontBody={fontBody}
+                    placeholder="Due date"
+                  />
+                </NeoSurface>
+                <NeoSurface pressed style={{ flex: 1, padding: '10px 14px', borderRadius: 14, display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <TimePicker
+                    value={quickAddDueTime}
+                    onChange={setQuickAddDueTime}
+                    theme={theme}
+                    fontBody={fontBody}
+                    placeholder="Due time"
+                  />
+                </NeoSurface>
+              </div>
+              <NeoSurface pressed style={{ padding: '10px 14px', borderRadius: 14, display: 'flex', alignItems: 'center', gap: 8 }}>
+                <ReminderPicker
+                  value={quickAddReminder}
+                  onChange={setQuickAddReminder}
+                  theme={theme}
+                  fontBody={fontBody}
+                  placeholder="Set reminder"
+                />
+              </NeoSurface>
+              {quickAddSubtasks.map((st, i) => (
+                <NeoSurface pressed key={st.id} style={{ padding: '10px 14px', borderRadius: 14, display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <Icon name="git-commit" size={16} color={st.text ? theme.accent : theme.textSecondary} />
+                  <input 
+                    type="text"
+                    placeholder={`Subtask ${i + 1}`}
+                    value={st.text}
+                    onChange={(e) => {
+                      const next = [...quickAddSubtasks];
+                      next[i].text = e.target.value;
+                      setQuickAddSubtasks(next);
+                    }}
+                    style={{ flex: 1, width: '100%', background: 'transparent', border: 'none', color: st.text ? theme.accent : theme.textPrimary, fontSize: 14, outline: 'none', ...fontBody }}
+                  />
+                  <button 
+                    onClick={() => setQuickAddSubtasks(prev => prev.filter((_, idx) => idx !== i))}
+                    style={{ background: 'none', border: 'none', color: theme.textSecondary, cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center' }}
+                  >
+                    <Icon name="trash-2" size={14} />
+                  </button>
+                </NeoSurface>
+              ))}
+              {quickAddSubtasks.length < 5 && (
+                <button 
+                  onClick={() => setQuickAddSubtasks(p => [...p, { id: generateId(), text: '', done: false }])}
+                  style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 8px', background: 'none', border: 'none', color: theme.textSecondary, cursor: 'pointer', fontSize: 13, alignSelf: 'flex-start', ...fontBody }}
+                >
+                  <Icon name="plus" size={14} /> Add subtask
+                </button>
+              )}
+            </div>
+          )}
+          <form onSubmit={(e) => {
+            e.preventDefault();
+            if (newTaskText.trim()) {
+              addTodo({ 
+                text: newTaskText.trim(), 
+                myDayDate: today,
+                due: quickAddDue || null,
+                dueTime: quickAddDueTime || null,
+                reminder: quickAddReminder || null,
+                subtasks: quickAddSubtasks.filter(s => s.text.trim().length > 0)
+              });
+              setNewTaskText('');
+              setQuickAddDue('');
+              setQuickAddDueTime('');
+              setQuickAddReminder('');
+              setQuickAddSubtasks([]);
+              setShowQuickAddExtras(false);
+            }
+          }}>
+            <NeoSurface pressed style={{ padding: '4px 8px', borderRadius: 24, display: 'flex', alignItems: 'center' }}>
+              <button 
+                type="button"
+                onClick={() => setShowQuickAddExtras(!showQuickAddExtras)}
+                style={{ width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', color: showQuickAddExtras || quickAddDue || quickAddReminder ? theme.accent : theme.textSecondary, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+              >
+                <Icon name="sliders" size={18} />
+              </button>
+              <input 
+                type="text"
+                placeholder="Add a task for today..."
+                value={newTaskText}
+                onChange={(e) => setNewTaskText(e.target.value)}
+                style={{ 
+                  flex: 1, background: 'transparent', border: 'none', 
+                  color: theme.textPrimary, fontSize: 15, padding: '8px 12px', 
+                  outline: 'none', ...fontBody 
+                }}
+              />
+              <button 
+                type="submit" 
+                disabled={!newTaskText.trim()}
+                style={{ 
+                  width: 32, height: 32, borderRadius: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', 
+                  color: '#fff', background: newTaskText.trim() ? theme.accent : theme.textSecondary, 
+                  border: 'none', cursor: newTaskText.trim() ? 'pointer' : 'default', padding: 0, transition: 'background 0.2s'
+                }}
+              >
+                <ArrowUp size={18} />
+              </button>
+            </NeoSurface>
+          </form>
+        </div>
       </div>
 
       {/* Focus Timer */}
       <div style={{ 
         ...card, 
-        display: 'flex', 
-        alignItems: 'center', 
-        gap: 20,
         position: 'relative', 
         overflow: 'hidden',
-        animation: timerState.isRunning ? 'pulseTimer 2s infinite' : 'none' 
+        animation: timerState.isRunning ? 'pulseTimer 2s infinite' : 'none',
+        padding: '16px 20px'
       }}>
         <style>{`
           @keyframes pulseTimer {
@@ -429,36 +723,20 @@ export default function SummaryTab({ theme, NeoSurface, NeoInput, fontDisplay, f
             100% { box-shadow: 0 0 0 0 ${theme.accent}00; }
           }
         `}</style>
-        <div style={{ position: 'relative', width: 72, height: 72, flexShrink: 0 }}>
-          <MiniTimer
-            remainingSeconds={liveRemaining}
-            durationSeconds={timerState.durationSeconds}
-            isRunning={timerState.isRunning}
-            onNavigate={() => onNavigate('timer')}
-          />
-        </div>
-        <div style={{ flex: 1 }}>
-          <div style={label}>Focus Timer</div>
-          <div style={{ fontSize: 14, color: theme.textPrimary, fontWeight: 600, ...fontDisplay }}>
-            {timerState.isRunning ? 'Session in progress' : 'Ready to focus?'}
-          </div>
-          <div style={{ fontSize: 12, color: theme.textSecondary, marginTop: 3, ...fontBody }}>
-            {timerState.history.length} sessions completed
-          </div>
-          {!timerState.isRunning && (
-            <button
-              onClick={() => onNavigate('timer')}
-              style={{
-                marginTop: 10, padding: '7px 16px', borderRadius: 10,
-                background: `linear-gradient(135deg, ${theme.accent}, #5a4fcf)`,
-                border: 'none', color: '#fff', fontSize: 12, fontWeight: 600,
-                cursor: 'pointer', ...fontBody,
-              }}
-            >
-              Start Session
-            </button>
-          )}
-        </div>
+        
+        <SummaryFocusTimer
+          theme={theme}
+          fontDisplay={fontDisplay}
+          fontBody={fontBody}
+          timerState={timerState}
+          liveRemaining={timerState.remainingSeconds}
+          setDuration={setDuration}
+          startTimer={startTimer}
+          pauseTimer={pauseTimer}
+          stopTimer={stopTimer}
+          addTime={focusTimer.addTime}
+          onNavigate={() => onNavigate('timer')}
+        />
       </div>
 
       {/* Monthly Modal Overlay */}

@@ -21,6 +21,9 @@
     "@capacitor/share": "^8.0.1",
     "@google/genai": "^2.10.0",
     "@gsap/react": "^2.1.2",
+    "@react-three/drei": "^10.7.7",
+    "@react-three/fiber": "^9.6.1",
+    "framer-motion": "^12.42.2",
     "gsap": "^3.15.0",
     "idb-keyval": "^6.3.0",
     "lucide-react": "^1.23.0",
@@ -28,6 +31,7 @@
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
     "recharts": "^3.9.2",
+    "three": "^0.185.1",
     "xlsx": "^0.18.5"
   },
   "devDependencies": {

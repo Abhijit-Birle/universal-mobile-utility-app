@@ -84,12 +84,29 @@ import {
   Tag,
   AlertTriangle,
   LayoutDashboard,
-  PiggyBank
+  PiggyBank,
+  Home
 } from "lucide-react";
 import * as LucideIcons from "lucide-react";
 import * as XLSX from "xlsx";
-import Strands from "./components/Strands.jsx";
+import LiquidWave from "./components/ui/LiquidWave.jsx";
 import BreathingExercise from "./components/BreathingExercise.jsx";
+import BreathingScreen from "./components/BreathingScreen.jsx";
+import MeditationTimerCard from "./components/MeditationTimerCard.jsx";
+
+const Aurora = React.lazy(() => import('./components/reactbits/Aurora.jsx'));
+const RisingBubbles = React.lazy(() => import('./components/reactbits/RisingBubbles.jsx'));
+const Particles = React.lazy(() => import('./components/reactbits/Particles.jsx'));
+const Waves = React.lazy(() => import('./components/reactbits/Waves.jsx'));
+const MagicRings = React.lazy(() => import('./components/reactbits/MagicRings.jsx'));
+const ElectricBorder = React.lazy(() => import('./components/reactbits/ElectricBorder.jsx'));
+const OrbitNodes = React.lazy(() => import('./components/reactbits/OrbitNodes.jsx'));
+const FallingParticles = React.lazy(() => import('./components/reactbits/FallingParticles.jsx'));
+const OrbitingDots = React.lazy(() => import('./components/reactbits/OrbitingDots.jsx'));
+const GradientFlow = React.lazy(() => import('./components/reactbits/GradientFlow.jsx'));
+const FluidMetaballs = React.lazy(() => import('./components/reactbits/FluidMetaballs.jsx'));
+const MagneticAttraction = React.lazy(() => import('./components/reactbits/MagneticAttraction.jsx'));
+const FractalExpansion = React.lazy(() => import('./components/reactbits/FractalExpansion.jsx'));
 import TodoTab from "./tabs/TodoTab.jsx";
 import SummaryTab from "./tabs/SummaryTab.jsx";
 import TimePicker from "./components/ui/TimePicker.jsx";
@@ -99,7 +116,9 @@ import { useTodos } from "./hooks/useTodos.js";
 import { useAsyncStorage } from "./hooks/useAsyncStorage.js";
 import { useLocalStorage } from "./hooks/useLocalStorage.js";
 import { useStreak } from "./hooks/useStreak.js";
+import { useZenStreak } from "./hooks/useZenStreak.js";
 import { markDayActive } from "./utils/streak.js";
+import { markZenActiveToday } from "./utils/zenStreak.js";
 import SplitText from "./components/ui/SplitText.jsx";
 import { CURRENCIES, formatCurrency, getCurrencyByCode } from "./utils/currency.js";
 import {
@@ -291,6 +310,7 @@ export default function NeoApp() {
   const [history, setHistory, historyLoading] = useAsyncStorage("neo_history", []);
   const [dailyGoalMinutes, setDailyGoalMinutes] = useLocalStorage("neo_dailyGoalMinutes", 240);
   const [hours, setHours] = useState(0);
+  const [showCustomTimer, setShowCustomTimer] = useState(false);
   const [minutes, setMinutes] = useState(25);
   const [seconds, setSeconds] = useState(0);
   const [name, setName] = useState("");
@@ -332,6 +352,7 @@ export default function NeoApp() {
   };
 
   const playAlarm = () => {
+    stopAlarm();
     initAudioCtx();
     const ctx = audioCtxRef.current;
 
@@ -352,7 +373,7 @@ export default function NeoApp() {
 
     alarmTimeoutRef.current = setTimeout(() => {
       stopAlarm();
-    }, 60000);
+    }, 10000);
   };
 
   const ytPlayerRef = useRef(null);
@@ -470,6 +491,9 @@ export default function NeoApp() {
   const [mode, setMode] = useState("focus"); // focus | pomodoro
   const [pomoPhase, setPomoPhase] = useState("Focus"); // Focus | Break
   const [pomoCycle, setPomoCycle] = useState(1);
+  const [pomoFocusDuration, setPomoFocusDuration] = useState(25);
+  const [pomoBreakDuration, setPomoBreakDuration] = useState(5);
+  const [pomoMaxCycles, setPomoMaxCycles] = useState(4);
   const { streak, activeDays, monthlyActiveCount, daysInMonth: streakDaysInMonth, yearlyActiveCount, daysInYear } = useStreak();
   const [transactions, setTransactions, transactionsLoading] = useAsyncStorage("neo_transactions", []);
   const [linkedTodo, setLinkedTodo] = useState(null);
@@ -607,6 +631,62 @@ export default function NeoApp() {
   const [showBudgetModal, setShowBudgetModal] = useState(false);
   const [showBudgetDropdown, setShowBudgetDropdown] = useState(false);
   const [activeReminders, setActiveReminders] = useState([]);
+  const [showBreathing, setShowBreathing] = useState(false);
+  
+  // Zen Tab States
+  const [dailyIntention, setDailyIntention] = useState(() => {
+    try {
+      const stored = localStorage.getItem("neo_daily_intention");
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (parsed.date === getLocalToday()) return parsed.text;
+      }
+    } catch(e){}
+    return "";
+  });
+  const { streak: zenStreak } = useZenStreak();
+  const [meditationDuration, setMeditationDuration] = useState(5); // in minutes
+  const [meditationTimeLeft, setMeditationTimeLeft] = useState(5 * 60);
+  const [isMeditating, setIsMeditating] = useState(false);
+
+  useEffect(() => {
+    if (activeTab === 'meditation') {
+      markZenActiveToday();
+    }
+  }, [activeTab]);
+
+  useEffect(() => {
+    let interval;
+    if (isMeditating && meditationTimeLeft > 0) {
+      interval = setInterval(() => {
+        setMeditationTimeLeft((prev) => prev - 1);
+      }, 1000);
+    } else if (isMeditating && meditationTimeLeft === 0) {
+      setIsMeditating(false);
+      markZenActiveToday();
+      // Simple Beep
+      try {
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        const osc = ctx.createOscillator();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(440, ctx.currentTime);
+        osc.connect(ctx.destination);
+        osc.start();
+        osc.stop(ctx.currentTime + 1);
+      } catch (e) {
+        console.error("Audio Context failed", e);
+      }
+    }
+    return () => clearInterval(interval);
+  }, [isMeditating, meditationTimeLeft]);
+
+  const saveDailyIntention = (text) => {
+    setDailyIntention(text);
+    localStorage.setItem("neo_daily_intention", JSON.stringify({
+      text,
+      date: getLocalToday()
+    }));
+  };
 
   // Reminder Logic
   useEffect(() => {
@@ -687,6 +767,8 @@ export default function NeoApp() {
   const [showInsights, setShowInsights] = useState(false);
 
   const [showSettings, setShowSettings] = useState(false);
+  const [expenseView, setExpenseView] = useState("wallet"); // "wallet" | "dashboard" | "settings"
+  const [walletCardIndex, setWalletCardIndex] = useState(0); // active card in the carousel
   const [showRuleModal, setShowRuleModal] = useState(false);
   const [showWipeConfirm, setShowWipeConfirm] = useState(false);
 
@@ -909,7 +991,13 @@ export default function NeoApp() {
     />
   ), [theme]);
 
-  const CollapsibleSection = ({ title, defaultOpen = true, children, extraHeader }) => {
+  const SectionLabel = useCallback(({ children, style }) => (
+    <div style={{ color: theme.textSecondary, fontSize: 13, fontWeight: 700, letterSpacing: 0.5, textTransform: "uppercase", marginBottom: 12, ...fontDisplay, ...style }}>
+      {children}
+    </div>
+  ), [theme]);
+
+  const CollapsibleSection = useCallback(({ title, defaultOpen = true, children, extraHeader }) => {
     const [isOpen, setIsOpen] = useState(defaultOpen);
     
     return (
@@ -957,13 +1045,7 @@ export default function NeoApp() {
         </div>
       </div>
     );
-  };
-
-  const SectionLabel = useCallback(({ children, style }) => (
-    <div style={{ color: theme.textSecondary, fontSize: 13, fontWeight: 700, letterSpacing: 0.5, textTransform: "uppercase", marginBottom: 12, ...fontDisplay, ...style }}>
-      {children}
-    </div>
-  ), [theme]);
+  }, [theme, SectionLabel]);
 
 
 
@@ -1089,15 +1171,15 @@ export default function NeoApp() {
             { id: sid, name: name || autoTimerName(minutes), minutes, date: new Date().toISOString(), category: lTodo ? lTodo.category : 'Personal', note: "" },
             ...h,
           ]);
-          setStreak((s) => s + 1);
+          markDayActive();
           if (linkedTodo) incrementPomodoro(linkedTodo);
           setShowNoteModal(true);
           setPomoPhase("Break");
-          setHours(0); setMinutes(pomoCycle % 4 === 0 ? 15 : 5); setSeconds(0);
+          setHours(0); setMinutes(pomoCycle % pomoMaxCycles === 0 ? 15 : pomoBreakDuration); setSeconds(0);
         } else {
           setPomoPhase("Focus");
           setPomoCycle((c) => c + 1);
-          setHours(0); setMinutes(25); setSeconds(0);
+          setHours(0); setMinutes(pomoFocusDuration); setSeconds(0);
         }
       } else {
         const sid = Date.now();
@@ -1107,6 +1189,7 @@ export default function NeoApp() {
           { id: sid, name: name || autoTimerName(minutes), minutes, date: new Date().toISOString(), category: lTodo ? lTodo.category : 'Personal', note: "" },
           ...h,
         ]);
+        markDayActive();
         setShowNoteModal(true);
       }
       return;
@@ -1197,6 +1280,11 @@ export default function NeoApp() {
       if (!isRunning && !name) setName(autoTimerName(minutes));
 
       const willRun = !isRunning;
+      
+      if (willRun && mode === "pomodoro" && pomoPhase === "Focus" && pomoCycle === 1) {
+        setPomoFocusDuration(minutes);
+      }
+
       setIsRunning(willRun);
 
       initAudioCtx();
@@ -1215,7 +1303,7 @@ export default function NeoApp() {
         <div style={{ display: "flex", alignItems: "center", justifyContent: "center", position: "relative", marginBottom: 14 }}>
           <div style={{ display: "flex", gap: 4, background: theme.bg, boxShadow: theme.shadowPressed, borderRadius: 14, padding: 4 }}>
             {["focus", "pomodoro"].map((m) => (
-              <button key={m} onClick={() => { setMode(m); setIsRunning(false); if (m === "pomodoro") { setPomoPhase("Focus"); setHours(0); setMinutes(25); setSeconds(0); } }} style={{
+              <button key={m} onClick={() => { setMode(m); setIsRunning(false); if (m === "pomodoro") { setPomoPhase("Focus"); setPomoCycle(1); setHours(0); setMinutes(pomoFocusDuration); setSeconds(0); } }} style={{
                 border: "none", padding: "7px 12px", borderRadius: 10, fontSize: 11.5, fontWeight: 600, ...fontBody,
                 background: mode === m ? `linear-gradient(135deg, ${theme.accent}, #5a4fcf)` : "transparent",
                 color: mode === m ? "#fff" : theme.textSecondary,
@@ -1229,21 +1317,27 @@ export default function NeoApp() {
           )}
         </div>
 
-        {mode === "pomodoro" && (
-          <NeoSurface style={{ padding: "10px 14px", marginBottom: 14, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <span style={{ color: pomoPhase === "Focus" ? theme.accent : theme.accent2, fontWeight: 700, fontSize: 12.5, ...fontBody }}>{pomoPhase} phase</span>
-            </div>
-            <div style={{ display: "flex", gap: 4 }}>
-              {[1, 2, 3, 4].map((i) => (
-                <div key={i} style={{ width: 8, height: 8, borderRadius: "50%", background: i <= ((pomoCycle - 1) % 4) + (pomoPhase === "Break" ? 1 : 0) ? theme.accent : (darkMode ? "#3a4051" : "#c9cfda") }} />
-              ))}
-            </div>
-            <span style={{ color: theme.textSecondary, fontSize: 11, ...fontBody }}>Cycle {pomoCycle}</span>
-          </NeoSurface>
-        )}
+
 
         <NeoSurface style={{ padding: "32px", display: "flex", flexDirection: "column", alignItems: "center", position: "relative", overflow: "hidden", maxWidth: 460, margin: "0 auto" }}>
+
+          {mode === "pomodoro" && (
+            <div style={{ width: "100%", display: "flex", flexDirection: "column", gap: 12, marginBottom: 24, paddingBottom: 16, borderBottom: `1px solid ${theme.border}` }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <span style={{ color: pomoPhase === "Focus" ? theme.accent : theme.accent2, fontWeight: 700, fontSize: 12.5, ...fontBody }}>{pomoPhase} phase</span>
+                </div>
+                <div style={{ display: "flex", gap: 4 }}>
+                  {[...Array(pomoMaxCycles)].map((_, i) => (
+                    <div key={i} style={{ width: 8, height: 8, borderRadius: "50%", background: i <= ((pomoCycle - 1) % pomoMaxCycles) + (pomoPhase === "Break" ? 1 : 0) ? theme.accent : (darkMode ? "#3a4051" : "#c9cfda") }} />
+                  ))}
+                </div>
+                <span style={{ color: theme.textSecondary, fontSize: 11, ...fontBody }}>Cycle {pomoCycle}</span>
+              </div>
+              
+
+            </div>
+          )}
 
           <div style={{ width: "100%", position: "relative", zIndex: 1, marginBottom: 32 }}>
             <NeoInput
@@ -1305,40 +1399,270 @@ export default function NeoApp() {
             })()}
           </div>
 
-          {!isRunning ? (
-            <div style={{ position: "relative", zIndex: 1, display: "flex", justifyContent: "center", alignItems: "center", height: svgSize, gap: 16 }}>
-              <WheelPicker
-                options={Array.from({ length: 24 }, (_, i) => i)}
-                value={hours}
-                onChange={setHours}
-                label="hours"
-              />
-              <WheelPicker
-                options={Array.from({ length: 60 }, (_, i) => i)}
-                value={minutes}
-                onChange={setMinutes}
-                label="min"
-              />
-              <WheelPicker
-                options={Array.from({ length: 60 }, (_, i) => i)}
-                value={seconds}
-                onChange={setSeconds}
-                label="sec"
-              />
-            </div>
-          ) : (
-            <div style={{ position: "relative", zIndex: 1, display: "flex", justifyContent: "center", alignItems: "center", height: 260, width: "100%" }}>
-              <div style={{ width: 240, height: 240, borderRadius: "50%", background: theme.bg, boxShadow: theme.shadowRaised, display: "flex", flexDirection: "column", justifyContent: "center", alignItems: "center", position: "relative" }}>
-                <div style={{ position: "absolute", inset: 12, borderRadius: "50%", border: `4px solid ${theme.accent}33` }} />
-                <svg style={{ position: "absolute", inset: 0, width: "100%", height: "100%", transform: "rotate(-90deg)" }}>
-                  <circle cx="120" cy="120" r="108" fill="none" stroke={theme.accent} strokeWidth="8" strokeLinecap="round" strokeDasharray="678" strokeDashoffset={678 - (remaining / (hours * 3600 + minutes * 60 + seconds || 1)) * 678} style={{ transition: "stroke-dashoffset 1s linear" }} />
-                </svg>
-                <div style={{ width: 200, height: 200, borderRadius: "50%", background: theme.bg, boxShadow: theme.shadowPressed, display: "flex", flexDirection: "column", justifyContent: "center", alignItems: "center", zIndex: 1 }}>
-                  <span style={{ fontSize: 56, fontWeight: 800, color: theme.accent, ...fontDisplay, letterSpacing: -1, lineHeight: 1 }}>
-                    {Math.floor((remaining % 3600) / 60).toString().padStart(2, '0')}:{(remaining % 60).toString().padStart(2, '0')}
-                  </span>
-                  {hours > 0 && <span style={{ fontSize: 16, color: theme.textSecondary, fontWeight: 600, marginTop: 4 }}>{Math.floor(remaining / 3600)} hr</span>}
+          {(() => {
+            const totalSecs = (hours || 0) * 3600 + (minutes || 0) * 60 + (seconds || 0) || 1;
+            const isPaused = !isRunning && remaining < totalSecs && remaining > 0;
+            const prog = isRunning || isPaused ? (remaining / totalSecs) : 0;
+            const elapsed = 1 - prog;
+            const CX = 145, CY = 145, R_OUTER = 112, R_NEEDLE = 82;
+            const circumference = 2 * Math.PI * R_OUTER;
+            const strokeDashoffset = circumference * (1 - elapsed);
+            const needleAngle = elapsed * 360;
+            const needleRad = (needleAngle - 90) * (Math.PI / 180);
+            const needleTipX = CX + R_NEEDLE * Math.cos(needleRad);
+            const needleTipY = CY + R_NEEDLE * Math.sin(needleRad);
+            const isDark = darkMode;
+
+            const hexToRgb = (hex) => {
+              const shorthandRegex = /^#?([a-f\d])([a-f\d])([a-f\d])$/i;
+              hex = hex.replace(shorthandRegex, (m, r, g, b) => r + r + g + g + b + b);
+              const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+              return result ? [parseInt(result[1], 16), parseInt(result[2], 16), parseInt(result[3], 16)] : [0, 0, 0];
+            };
+
+            const interpolateRgb = (color1, color2, factor) => {
+              const c1 = hexToRgb(color1);
+              const c2 = hexToRgb(color2);
+              const r = Math.round(c1[0] + factor * (c2[0] - c1[0]));
+              const g = Math.round(c1[1] + factor * (c2[1] - c1[1]));
+              const b = Math.round(c1[2] + factor * (c2[2] - c1[2]));
+              return `rgb(${r}, ${g}, ${b})`;
+            };
+
+            let dynamicColor = theme.accent;
+            if (isRunning || isPaused) {
+              if (prog > 0.5) {
+                const factor = (1 - prog) * 2;
+                dynamicColor = interpolateRgb(theme.accent, '#F59E0B', factor);
+              } else {
+                const factor = (0.5 - prog) * 2;
+                dynamicColor = interpolateRgb('#F59E0B', '#EF4444', factor);
+              }
+            }
+
+            const TICK_COUNT = 60;
+            const ticks = Array.from({ length: TICK_COUNT }, (_, i) => {
+              const a = ((i / TICK_COUNT) * 360 - 90) * (Math.PI / 180);
+              const isMajor = i % 5 === 0;
+              const r1 = R_OUTER + (isMajor ? 14 : 9);
+              const r2 = R_OUTER + (isMajor ? 22 : 16);
+              return { x1: CX + r1 * Math.cos(a), y1: CY + r1 * Math.sin(a), x2: CX + r2 * Math.cos(a), y2: CY + r2 * Math.sin(a), isMajor, lit: (isRunning || isPaused) && ((i / TICK_COUNT) <= elapsed) };
+            });
+
+            const lightShadow = isDark ? 'rgba(255,255,255,0.02)' : 'rgba(255,255,255,0.4)';
+            const darkShadow = isDark ? 'rgba(0,0,0,0.5)' : 'rgba(0,0,0,0.15)';
+            
+            const displaySecs = isRunning || isPaused ? remaining : totalSecs;
+
+            return (
+              <div style={{ position: "relative", zIndex: 1, display: "flex", justifyContent: "center", alignItems: "center", height: 290, width: "100%", marginBottom: 32 }}>
+                <div style={{ position: "relative", width: 290, height: 290 }}>
+                  <svg width="100%" height="100%" viewBox="0 0 290 290" style={{ position: "absolute", top: 0, left: 0 }}>
+                    {/* Tick marks */}
+                    {ticks.map((t, i) => (
+                      <line key={i} x1={t.x1} y1={t.y1} x2={t.x2} y2={t.y2}
+                        stroke={t.lit ? dynamicColor : (isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)')}
+                        strokeWidth={t.isMajor ? 2.5 : 1.5} strokeLinecap="round"
+                        style={{ transition: "stroke 1s linear" }} />
+                    ))}
+                    {/* Track */}
+                    <circle cx={CX} cy={CY} r={R_OUTER} fill="none" stroke={isDark ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.05)"} strokeWidth={14} />
+                    {/* Progress arc */}
+                    <circle cx={CX} cy={CY} r={R_OUTER} fill="none" stroke={dynamicColor} strokeWidth={14}
+                      strokeLinecap="round" strokeDasharray={circumference} strokeDashoffset={strokeDashoffset}
+                      transform={`rotate(-90 ${CX} ${CY})`}
+                      style={{ transition: "stroke-dashoffset 1s linear, stroke 1s linear, filter 1s linear", filter: `drop-shadow(0 0 6px ${dynamicColor}80)` }} />
+                    {/* Inset bowl */}
+                    <circle cx={CX} cy={CY} r={R_OUTER - 18} fill={theme.bg}
+                      style={{ filter: `drop-shadow(2px 2px 5px ${darkShadow}) drop-shadow(-2px -2px 5px ${lightShadow})` }} />
+                    {/* Middle raised */}
+                    <circle cx={CX} cy={CY} r={72} fill={theme.bg}
+                      style={{ filter: `drop-shadow(-3px -3px 6px ${lightShadow}) drop-shadow(3px 3px 6px ${darkShadow})` }} />
+                    {/* Inner recessed */}
+                    <circle cx={CX} cy={CY} r={54} fill={theme.bg}
+                      style={{ filter: `drop-shadow(inset 2px 2px 5px ${darkShadow}) drop-shadow(inset -2px -2px 5px ${lightShadow})` }} />
+                    {/* Needle */}
+                    {(isRunning || isPaused) && (
+                      <>
+                        <line x1={CX+1} y1={CY+1} x2={needleTipX+1} y2={needleTipY+1} stroke={darkShadow} strokeWidth={3} strokeLinecap="round" />
+                        <line x1={CX} y1={CY} x2={needleTipX} y2={needleTipY} stroke={dynamicColor} strokeWidth={2.5} strokeLinecap="round" style={{ transition: "x2 1s linear, y2 1s linear, stroke 1s linear" }} />
+                        <circle cx={CX} cy={CY} r={5} fill={dynamicColor} style={{ transition: "fill 1s linear" }} />
+                        <circle cx={CX} cy={CY} r={2.5} fill={isDark ? "rgba(255,255,255,0.25)" : "rgba(255,255,255,0.8)"} />
+                        <circle cx={needleTipX} cy={needleTipY} r={5} fill={dynamicColor}
+                          style={{ filter: `drop-shadow(0 0 4px ${dynamicColor})`, transition: "cx 1s linear, cy 1s linear, fill 1s linear, filter 1s linear" }} />
+                      </>
+                    )}
+                  </svg>
+                  
+                  {/* Dynamic Liquid Wave Visualization */}
+                  {(isRunning || isPaused) && (
+                    <div style={{
+                      position: 'absolute', top: CY - 54, left: CX - 54,
+                      width: 108, height: 108, borderRadius: '50%',
+                      overflow: 'hidden', pointerEvents: 'none'
+                    }}>
+                      <LiquidWave 
+                        progress={1 - prog}
+                        color={dynamicColor}
+                        backgroundColor={theme.bg}
+                        size={108}
+                      />
+                    </div>
+                  )}
+
+                  {/* Time text */}
+                  <div style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%,-50%)", textAlign: "center", pointerEvents: "none", zIndex: 2 }}>
+                    <div style={{ fontSize: 28, fontWeight: 700, color: theme.textPrimary, letterSpacing: "-1px", lineHeight: 1, ...fontDisplay }}>
+                      {Math.floor(displaySecs / 3600) > 0 ? `${Math.floor(displaySecs / 3600)}:` : ''}{Math.floor((displaySecs % 3600) / 60).toString().padStart(2, "0")}:{(displaySecs % 60).toString().padStart(2, "0")}
+                    </div>
+                    <div style={{ fontSize: 9, color: theme.textSecondary, fontWeight: 700, marginTop: 6, textTransform: "uppercase", letterSpacing: "0.15em", ...fontBody }}>
+                      {isRunning || isPaused ? 'remaining' : 'set time'}
+                    </div>
+                  </div>
                 </div>
+              </div>
+            );
+          })()}
+
+          {!isRunning && (
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: 32, zIndex: 1 }}>
+              {showCustomTimer ? (
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 }}>
+                  <div style={{ display: 'flex', gap: 16, height: 120 }}>
+                    <WheelPicker
+                      options={Array.from({ length: 13 }, (_, i) => i)}
+                      value={hours}
+                      onChange={setHours}
+                      label="hrs"
+                      theme={theme}
+                      itemHeight={36}
+                      fontSize={20}
+                    />
+                    <WheelPicker
+                      options={Array.from({ length: 60 }, (_, i) => i)}
+                      value={minutes}
+                      onChange={setMinutes}
+                      label="min"
+                      theme={theme}
+                      itemHeight={36}
+                      fontSize={20}
+                    />
+                  </div>
+                  <div style={{ display: 'flex', gap: 12 }}>
+                    <button
+                      onClick={() => setShowCustomTimer(false)}
+                      style={{
+                        padding: '8px 20px', borderRadius: 20, border: 'none',
+                        background: theme.bg, color: theme.textSecondary,
+                        boxShadow: theme.shadowRaisedSm, cursor: 'pointer',
+                        fontWeight: 600, ...fontBody
+                      }}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={() => {
+                        setShowCustomTimer(false);
+                      }}
+                      style={{
+                        padding: '8px 20px', borderRadius: 20, border: 'none',
+                        background: theme.accent, color: '#fff',
+                        boxShadow: `0 4px 12px ${theme.accent}60`, cursor: 'pointer',
+                        fontWeight: 600, ...fontBody
+                      }}
+                    >
+                      Set Timer
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', gap: 14 }}>
+                  {[5, 10, 15, 20].map(min => {
+                    const active = hours === 0 && minutes === min && seconds === 0;
+                    return (
+                      <button
+                        key={min}
+                        onClick={() => { setHours(0); setMinutes(min); setSeconds(0); setRemaining(min * 60); }}
+                        style={{
+                          width: 58, height: 58,
+                          background: theme.bg,
+                          color: active ? theme.accent : theme.textSecondary,
+                          boxShadow: active ? theme.shadowInset : theme.shadowRaisedSm,
+                          border: 'none', borderRadius: 16,
+                          display: 'flex', flexDirection: 'column',
+                          alignItems: 'center', justifyContent: 'center',
+                          cursor: 'pointer',
+                          transition: 'all 0.25s',
+                          outline: active ? `2px solid ${theme.accent}55` : 'none',
+                        }}
+                      >
+                        <div style={{ fontSize: 18, fontWeight: 700, lineHeight: 1, ...fontDisplay }}>
+                          {String(min).padStart(2, '0')}
+                        </div>
+                        <div style={{ fontSize: 9, marginTop: 3, letterSpacing: '0.05em', ...fontBody }}>min</div>
+                      </button>
+                    );
+                  })}
+                  {/* Custom button */}
+                  <button
+                    onClick={() => {
+                      setShowCustomTimer(true);
+                    }}
+                    style={{
+                      width: 58, height: 58,
+                      background: theme.bg,
+                      color: theme.textSecondary,
+                      boxShadow: theme.shadowRaisedSm,
+                      border: 'none', borderRadius: 16,
+                      display: 'flex', flexDirection: 'column',
+                      alignItems: 'center', justifyContent: 'center',
+                      cursor: 'pointer',
+                      transition: 'all 0.25s',
+                    }}
+                  >
+                    <div style={{ fontSize: 14, fontWeight: 700, ...fontBody }}>...</div>
+                    <div style={{ fontSize: 9, marginTop: 2, ...fontBody }}>custom</div>
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+
+          {mode === "pomodoro" && !isRunning && pomoPhase === "Focus" && pomoCycle === 1 && (
+            <div style={{ display: "flex", gap: 16, marginBottom: 32, width: "100%" }}>
+              <div style={{ flex: 1, display: "flex", flexDirection: "column" }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: theme.textSecondary, marginBottom: 8, letterSpacing: 1 }}>BREAK TIME (MIN)</div>
+                <NeoSelect
+                  value={pomoBreakDuration}
+                  onChange={setPomoBreakDuration}
+                  options={[
+                    { value: 5, label: "5 Minutes" },
+                    { value: 10, label: "10 Minutes" },
+                    { value: 15, label: "15 Minutes" },
+                    { value: 20, label: "20 Minutes" },
+                    { value: 25, label: "25 Minutes" },
+                    { value: 30, label: "30 Minutes" }
+                  ]}
+                  theme={theme}
+                  fontBody={fontBody}
+                />
+              </div>
+              <div style={{ flex: 1, display: "flex", flexDirection: "column" }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: theme.textSecondary, marginBottom: 8, letterSpacing: 1 }}>CYCLES</div>
+                <NeoSelect
+                  value={pomoMaxCycles}
+                  onChange={setPomoMaxCycles}
+                  options={[
+                    { value: 1, label: "1 Cycle" },
+                    { value: 2, label: "2 Cycles" },
+                    { value: 3, label: "3 Cycles" },
+                    { value: 4, label: "4 Cycles" },
+                    { value: 5, label: "5 Cycles" },
+                    { value: 6, label: "6 Cycles" }
+                  ]}
+                  theme={theme}
+                  fontBody={fontBody}
+                />
               </div>
             </div>
           )}
@@ -1395,6 +1719,42 @@ export default function NeoApp() {
               })}
             </div>
           </div>
+          {remaining <= 15 && remaining > 0 && isRunning && (
+            <div style={{ display: "flex", justifyContent: "center", gap: 12, marginTop: 16, zIndex: 1, position: "relative" }}>
+              <button
+                onClick={() => {
+                  const newTotal = (hours * 3600 + minutes * 60 + seconds) + 60;
+                  setHours(Math.floor(newTotal / 3600));
+                  setMinutes(Math.floor((newTotal % 3600) / 60));
+                  setSeconds(newTotal % 60);
+                  setRemaining(prev => prev + 60);
+                }}
+                style={{
+                  background: theme.bg, border: "none", color: theme.textSecondary,
+                  padding: "6px 14px", borderRadius: 12, boxShadow: theme.shadowRaisedSm,
+                  fontSize: 12, fontWeight: 700, cursor: "pointer", ...fontBody
+                }}
+              >
+                +1 min
+              </button>
+              <button
+                onClick={() => {
+                  const newTotal = (hours * 3600 + minutes * 60 + seconds) + 300;
+                  setHours(Math.floor(newTotal / 3600));
+                  setMinutes(Math.floor((newTotal % 3600) / 60));
+                  setSeconds(newTotal % 60);
+                  setRemaining(prev => prev + 300);
+                }}
+                style={{
+                  background: theme.bg, border: "none", color: theme.textSecondary,
+                  padding: "6px 14px", borderRadius: 12, boxShadow: theme.shadowRaisedSm,
+                  fontSize: 12, fontWeight: 700, cursor: "pointer", ...fontBody
+                }}
+              >
+                +5 min
+              </button>
+            </div>
+          )}
 
           <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 20, marginTop: 24, position: "relative", zIndex: 1, width: "100%" }}>
 
@@ -1556,69 +1916,80 @@ export default function NeoApp() {
             })}
           </div>
         </div>
-
-        {showNoteModal && (
-          <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 55, padding: 24 }}>
-            <NeoSurface style={{ padding: 22, width: "100%", maxWidth: 340 }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
-                <Check size={16} color={theme.accent2} />
-                <span style={{ color: theme.textPrimary, fontWeight: 700, fontSize: 14.5, ...fontDisplay }}>Session complete</span>
-              </div>
-              <div style={{ color: theme.textSecondary, fontSize: 12, marginBottom: 12, ...fontBody }}>What did you get done?</div>
-              <textarea
-                value={sessionNote}
-                onChange={(e) => setSessionNote(e.target.value)}
-                placeholder="e.g. Finished the client report draft"
-                rows={3}
-                style={{ width: "100%", background: theme.bg, boxShadow: theme.shadowPressed, border: "none", borderRadius: 14, padding: "12px 14px", color: theme.textPrimary, fontSize: 13, outline: "none", resize: "none", ...fontBody }}
-              />
-              <div style={{ display: "flex", gap: 10, marginTop: 14 }}>
-                <button onClick={() => { stopAlarm(); setShowNoteModal(false); setSessionNote(""); }} style={{ flex: 1, border: "none", background: theme.bg, boxShadow: theme.shadowRaisedSm, borderRadius: 14, padding: "11px 0", color: theme.textSecondary, fontWeight: 600, fontSize: 13, ...fontBody }}>Skip</button>
-                <PrimaryButton label="Save note" icon={<Check size={15} />} onClick={() => {
-                  stopAlarm();
-                  setShowNoteModal(false);
-                  if (sessionNote.trim()) {
-                    setHistory(h => h.map(item => item.id === currentSessionId ? { ...item, note: sessionNote.trim() } : item));
-                  }
-                  setSessionNote("");
-                }} style={{ flex: 1 }} />
-              </div>
-            </NeoSurface>
-          </div>
-        )}
-
-        {showDailyGoalModal && (
-          <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 55, padding: 24 }}>
-            <NeoSurface style={{ padding: 22, width: "100%", maxWidth: 320 }}>
-              <div style={{ color: theme.textPrimary, fontSize: 16, fontWeight: 700, marginBottom: 16, ...fontDisplay }}>Edit daily focus goal</div>
-              <div style={{ color: theme.textSecondary, fontSize: 12, marginBottom: 4, ...fontBody }}>Goal (in minutes)</div>
-              <NeoInput type="number" placeholder="e.g. 240" value={tempDailyGoal} onChange={(e) => setTempDailyGoal(e.target.value)} />
-              <div style={{ display: "flex", gap: 10, marginTop: 16 }}>
-                <button onClick={() => setShowDailyGoalModal(false)} style={{ flex: 1, border: "none", background: theme.bg, boxShadow: theme.shadowRaisedSm, borderRadius: 12, padding: "10px 0", color: theme.textSecondary, fontWeight: 600, fontSize: 13, cursor: "pointer", ...fontBody }}>Cancel</button>
-                <button onClick={() => {
-                  const newGoal = parseInt(tempDailyGoal);
-                  if (!isNaN(newGoal) && newGoal > 0) {
-                    setDailyGoalMinutes(newGoal);
-                  }
-                  setShowDailyGoalModal(false);
-                }} style={{ flex: 1, border: "none", background: theme.accent, borderRadius: 12, padding: "10px 0", color: "#fff", fontWeight: 600, fontSize: 13, cursor: "pointer", ...fontBody }}>Save Changes</button>
-              </div>
-            </NeoSurface>
-          </div>
-        )}
       </div>
     );
   }
 
   /* ---------------------------------- MEDITATION TAB ---------------------------------- */
 
+
   const renderMeditationTab = () => {
     return (
-      <div style={{ flex: 1, display: "flex", flexDirection: "column", height: "100%", overflow: "hidden" }}>
-        <BreathingExercise theme={theme} darkMode={darkMode} />
+      <div style={{ flex: 1, display: "flex", flexDirection: "column", padding: "20px 16px", gap: 16, overflowY: "auto" }}>
+
+        {/* Streak & Header */}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "0 4px" }}>
+          <div style={{ fontSize: 24, fontWeight: 700, color: theme.textPrimary, ...fontDisplay }}>Zen</div>
+          <div style={{
+            display: "flex", alignItems: "center", gap: 6,
+            background: theme.bg, boxShadow: theme.shadowRaisedSm,
+            padding: "6px 12px", borderRadius: 20,
+            fontSize: 13, fontWeight: 600, color: theme.accent, ...fontBody
+          }}>
+            <span>🔥</span> {zenStreak} Day Streak
+          </div>
+        </div>
+
+        {/* Daily Intention */}
+        <NeoSurface style={{ borderRadius: 20, padding: "20px" }}>
+          <div style={{ fontSize: 13, color: theme.textSecondary, marginBottom: 12, fontWeight: 600, ...fontBody, textTransform: "uppercase", letterSpacing: "0.05em" }}>Daily Intention</div>
+          <input
+            type="text"
+            value={dailyIntention}
+            onChange={(e) => saveDailyIntention(e.target.value)}
+            placeholder="What is your intention for today?"
+            style={{
+              width: "100%", background: "transparent", border: "none", outline: "none",
+              color: theme.textPrimary, fontSize: 16, ...fontDisplay,
+              borderBottom: `1px solid ${theme.border || 'transparent'}`, paddingBottom: 8
+            }}
+          />
+        </NeoSurface>
+
+        {/* Breathe card */}
+        <NeoSurface
+          onClick={() => setShowBreathing(true)}
+          style={{
+            borderRadius: 20, padding: "24px 20px",
+            display: "flex", alignItems: "center", gap: 16, cursor: "pointer",
+          }}
+        >
+          <div style={{
+            width: 52, height: 52, borderRadius: 16, flexShrink: 0,
+            background: theme.bg, boxShadow: theme.shadowInset,
+            display: "flex", alignItems: "center", justifyContent: "center",
+            fontSize: 26,
+          }}>🫁</div>
+          <div>
+            <div style={{ fontWeight: 700, fontSize: 15, color: theme.textPrimary, ...fontDisplay }}>Breathing Exercise</div>
+            <div style={{ fontSize: 12, color: theme.textSecondary, marginTop: 3, ...fontBody }}>4-7-8 · Guided breath · Full screen</div>
+          </div>
+          <div style={{ marginLeft: "auto", color: theme.accent, fontSize: 20 }}>›</div>
+        </NeoSurface>
+
+        {/* Full-screen Breathing overlay */}
+        {showBreathing && (
+          <BreathingScreen
+            onClose={() => setShowBreathing(false)}
+            activeSource={activeSource}
+            musicOptions={MUSIC_OPTIONS}
+            onChangeSource={setActiveSource}
+          />
+        )}
       </div>
     );
   };
+
 
   /* ---------------------------------- EXPENSE TAB ---------------------------------- */
 
@@ -2035,10 +2406,268 @@ export default function NeoApp() {
       }
     };
 
+    // Build a "cards" list for the wallet carousel
+    const bankTotal = banks.reduce((s, b) => s + (parseFloat(b.balance) || 0), 0);
+
+    // All cards: first is "All Accounts" summary, then individual banks
+    const walletCards = [
+      {
+        id: "all",
+        name: "All Accounts",
+        balance: bankTotal,
+        number: banks.length > 0
+          ? banks.map(b => b.bankName.slice(0, 4).toUpperCase().padEnd(4, "·")).join(" ")
+          : "·····  ·····  ·····  ·····",
+        expiry: (() => { const d = new Date(); return `${String(d.getMonth()+1).padStart(2,"0")}/${String(d.getFullYear()).slice(-2)}`; })(),
+        color: "#1c1c22",
+        animationType: "orbitnodes",
+      },
+      ...banks.map((b, i) => {
+        const types = ["fluidmetaballs", "magneticattraction", "fractalexpansion", "fallingparticles", "orbitingdots", "gradientflow", "risingbubbles", "electric", "particles", "magicrings", "waves", "aurora", "orbitnodes"];
+        return {
+        id: b.id,
+        name: b.bankName,
+        balance: parseFloat(b.balance) || 0,
+        number: b.bankName.replace(/\s+/g,"").slice(0,4).toUpperCase().padEnd(4,"·") + " " +
+                b.bankName.slice(-4).toUpperCase().padEnd(4,"·") + " " +
+                String(b.id).slice(-4).padStart(4,"·") + " " +
+                String(parseInt(b.balance||0) % 9000 + 1000),
+        expiry: (() => { const n = new Date(); return `${String(n.getMonth()+1).padStart(2,"0")}/${String(n.getFullYear() + 2).slice(-2)}`; })(),
+        color: ["#1a1f2e","#1a2420","#1e1a28","#211e1a"][i % 4],
+        animationType: types[i % types.length]
+      }})
+    ];
+
+    // fix expiry for bank cards
+    const now2 = new Date();
+    const fmtExpiry = (yr_offset = 2) => `${String(now2.getMonth()+1).padStart(2,"0")}/${String(now2.getFullYear()+yr_offset).slice(-2)}`;
+    walletCards.forEach((c, i) => { if (i > 0) c.expiry = fmtExpiry(2); });
+
+    const activeCard = walletCards[Math.min(walletCardIndex, walletCards.length - 1)] || walletCards[0];
+
+    const WalletView = () => {
+      const spentPct = incomeThisMonth > 0 ? Math.min(spentThisMonth / incomeThisMonth, 1) : 0;
+      const cardDragRef = React.useRef({ startX: 0, startY: 0, dragging: false, cardEl: null });
+      const ICONS = [Flower2, PiggyBank, Box, Tag, MonitorPlay];
+
+      const handleTouchStart = (e) => {
+        e.stopPropagation();
+        cardDragRef.current.startX = e.touches[0].clientX;
+        cardDragRef.current.startY = e.touches[0].clientY;
+        cardDragRef.current.dragging = true;
+        cardDragRef.current.cardEl = e.currentTarget;
+        e.currentTarget.style.transition = "none";
+      };
+      const handleTouchMove = (e) => {
+        if (!cardDragRef.current.dragging || !cardDragRef.current.cardEl) return;
+        e.stopPropagation();
+        const dx = e.touches[0].clientX - cardDragRef.current.startX;
+        const dy = e.touches[0].clientY - cardDragRef.current.startY;
+        const rotate = dx * 0.05;
+        cardDragRef.current.cardEl.style.transform = `translate(${dx}px, ${dy}px) rotate(${rotate}deg)`;
+      };
+      const handleTouchEnd = (e) => {
+        if (!cardDragRef.current.dragging || !cardDragRef.current.cardEl) return;
+        e.stopPropagation();
+        const dx = e.changedTouches[0].clientX - cardDragRef.current.startX;
+        cardDragRef.current.dragging = false;
+        
+        if (dx < -60) {
+          setWalletCardIndex(i => (i + 1) % walletCards.length);
+        } else if (dx > 60) {
+          setWalletCardIndex(i => (i - 1 + walletCards.length) % walletCards.length);
+        }
+        cardDragRef.current.cardEl.style.transform = ""; // Reset inline transform, let React state take over
+      };
+
+      const handleMouseDown = (e) => {
+        e.stopPropagation();
+        cardDragRef.current.startX = e.clientX;
+        cardDragRef.current.startY = e.clientY;
+        cardDragRef.current.dragging = true;
+        cardDragRef.current.cardEl = e.currentTarget;
+        e.currentTarget.style.transition = "none";
+      };
+      const handleMouseMove = (e) => {
+        if (!cardDragRef.current.dragging || !cardDragRef.current.cardEl) return;
+        e.stopPropagation();
+        const dx = e.clientX - cardDragRef.current.startX;
+        const dy = e.clientY - cardDragRef.current.startY;
+        const rotate = dx * 0.05;
+        cardDragRef.current.cardEl.style.transform = `translate(${dx}px, ${dy}px) rotate(${rotate}deg)`;
+      };
+      const handleMouseUp = (e) => {
+        if (!cardDragRef.current.dragging || !cardDragRef.current.cardEl) return;
+        e.stopPropagation();
+        const dx = e.clientX - cardDragRef.current.startX;
+        cardDragRef.current.dragging = false;
+        
+        if (dx < -60) {
+          setWalletCardIndex(i => (i + 1) % walletCards.length);
+        } else if (dx > 60) {
+          setWalletCardIndex(i => (i - 1 + walletCards.length) % walletCards.length);
+        }
+        cardDragRef.current.cardEl.style.transform = ""; // Reset inline transform, let React state take over
+      };
+
+      return (
+        <div style={{ height: "100vh", display: "flex", flexDirection: "column", padding: "40px 20px 0", background: theme.bg, userSelect: "none", overflow: "hidden", position: "relative" }}>
+          
+          <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "flex-start", marginTop: 20 }}>
+            {/* Stacked Cards (Circular) */}
+            <div style={{ position: "relative", width: 230, height: 340, marginBottom: 50 }}>
+              {walletCards.map((card, i) => {
+                const N = walletCards.length;
+                let offset = i - walletCardIndex;
+                if (N > 2) {
+                  if (offset > N / 2) offset -= N;
+                  else if (offset < -N / 2) offset += N;
+                }
+                
+                if (Math.abs(offset) > 2) return null; // Show up to 2 cards before and after
+                
+                const isTop = offset === 0;
+                const scale = 1 - (Math.abs(offset) * 0.08);
+                const yOffset = offset * 24; // Cards before will be shifted up, cards after shifted down
+                const opacity = 1 - (Math.abs(offset) * 0.25);
+                const zIndex = 10 - Math.abs(offset); // Active card is always on top
+                const Icon = ICONS[i % ICONS.length];
+
+                return (
+                  <div
+                    key={card.id}
+                    style={{
+                      position: "absolute", left: 0, top: 0, right: 0, bottom: 0,
+                      borderRadius: 36,
+                      background: theme.bg,
+                      boxShadow: isTop ? theme.shadowRaised : "4px 4px 16px rgba(0,0,0,0.2)",
+                      border: `1px solid ${theme.accent}15`,
+                      display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+                      transform: `translate(0px, ${yOffset}px) scale(${scale})`,
+                      opacity,
+                      zIndex,
+                      transition: "all 0.4s cubic-bezier(.4,0,.2,1)",
+                      cursor: isTop ? "grab" : "default",
+                      touchAction: "none",
+                      overflow: "hidden"
+                    }}
+                    onTouchStart={isTop ? handleTouchStart : undefined}
+                    onTouchMove={isTop ? handleTouchMove : undefined}
+                    onTouchEnd={isTop ? handleTouchEnd : undefined}
+                    onMouseDown={isTop ? handleMouseDown : undefined}
+                    onMouseMove={isTop ? handleMouseMove : undefined}
+                    onMouseUp={isTop ? handleMouseUp : undefined}
+                    onMouseLeave={isTop ? handleMouseUp : undefined}
+                  >
+                    {/* Background Animation */}
+                    <div style={{ position: "absolute", left: 0, top: 0, right: 0, bottom: 0, zIndex: 0, borderRadius: 36, overflow: "hidden", pointerEvents: "none" }}>
+                      {isTop ? (
+                        <React.Suspense fallback={<div style={{ width: "100%", height: "100%", background: theme.bg }} />}>
+                          <div style={{ opacity: 1, width: "100%", height: "100%" }}>
+                            {card.animationType === "aurora" && <Aurora colorStops={["#3A29FF", "#FF94B4", "#FF3232"]} speed={0.5} />}
+                            {card.animationType === "risingbubbles" && <RisingBubbles />}
+                            {card.animationType === "particles" && <Particles particleColors={['#ffffff', '#ffffff']} particleCount={200} particleSpread={10} speed={0.1} particleBaseSize={100} moveParticlesOnHover={false} alphaParticles={true} disableRotation={false} />}
+                            {card.animationType === "waves" && <Waves lineColor="#ffffff" />}
+                            {card.animationType === "magicrings" && <MagicRings />}
+                            {card.animationType === "electric" && <ElectricBorder style={{width: "100%", height: "100%", borderRadius: 36}} />}
+                            {card.animationType === "orbitnodes" && <OrbitNodes />}
+                            {card.animationType === "fallingparticles" && <FallingParticles />}
+                            {card.animationType === "orbitingdots" && <OrbitingDots />}
+                            {card.animationType === "gradientflow" && <GradientFlow />}
+                            {card.animationType === "fluidmetaballs" && <FluidMetaballs />}
+                            {card.animationType === "magneticattraction" && <MagneticAttraction />}
+                            {card.animationType === "fractalexpansion" && <FractalExpansion />}
+                          </div>
+                        </React.Suspense>
+                      ) : (
+                        <div style={{ width: "100%", height: "100%", background: theme.bg }} />
+                      )}
+                    </div>
+
+                    <div style={{ position: "absolute", bottom: 40, left: 32, right: 32, display: "flex", justifyContent: "space-between", alignItems: "flex-end", zIndex: 1 }}>
+                      <div>
+                        <div style={{ fontSize: 12, color: theme.textSecondary, fontWeight: 600, marginBottom: 4, opacity: 0.8 }}>TOTAL BALANCE</div>
+                        <div style={{ fontSize: 28, fontWeight: 800, color: theme.textPrimary, ...fontDisplay, letterSpacing: 0.5 }}>
+                          {formatCurrency(card.balance, baseCurrency)}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Balance & Progress */}
+            <div style={{ width: "100%", maxWidth: 320, textAlign: "center", position: "relative", zIndex: 20 }}>
+              <div style={{ fontSize: 14, color: theme.textSecondary, fontWeight: 600, marginBottom: 8 }}>Total Balance</div>
+              <div style={{ fontSize: 40, fontWeight: 800, color: theme.textPrimary, ...fontDisplay, marginBottom: 32 }}>
+                {formatCurrency(activeCard?.balance ?? bankTotal, baseCurrency)}
+              </div>
+
+              {/* Progress Bar */}
+              <div style={{
+                height: 10, borderRadius: 10, background: theme.bg,
+                boxShadow: theme.shadowInset, marginBottom: 12, overflow: "hidden"
+              }}>
+                <div style={{
+                  height: "100%",
+                  width: `${(spentPct * 100).toFixed(1)}%`,
+                  borderRadius: 10,
+                  background: spentPct > 0.85
+                    ? `linear-gradient(90deg, ${theme.danger}cc, ${theme.danger})`
+                    : `linear-gradient(90deg, ${theme.accent}cc, ${theme.accent})`,
+                  transition: "width 0.6s cubic-bezier(.4,0,.2,1)",
+                }} />
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <div style={{ fontSize: 13, color: theme.textSecondary, fontWeight: 600 }}>Monthly Spent</div>
+                <div style={{ fontSize: 13, color: theme.textSecondary, fontWeight: 600 }}>
+                  {formatCurrency(spentThisMonth, baseCurrency)} / {formatCurrency(incomeThisMonth > 0 ? incomeThisMonth : bankTotal, baseCurrency)}
+                </div>
+              </div>
+            </div>
+
+            {/* Action Buttons */}
+            <div style={{
+              display: "flex", gap: 16, justifyContent: "center", width: "100%", maxWidth: 320, marginTop: 32, position: "relative", zIndex: 20
+            }}>
+              {[
+                { id: "wallet", icon: <Home size={22} />, label: "Home" },
+                { id: "add", icon: <Plus size={22} />, label: "Add" },
+                { id: "dashboard", icon: <LayoutDashboard size={22} />, label: "Dashboard" },
+                { id: "settings", icon: <Settings size={22} />, label: "Settings" },
+              ].map(btn => (
+                <button
+                  key={btn.id}
+                  onClick={() => {
+                    if (btn.id === "add") { setShowForm(true); }
+                    else if (btn.id === "settings") { setShowSettings(true); }
+                    else { setExpenseView(btn.id); }
+                  }}
+                  style={{
+                    flex: 1, height: 56, borderRadius: 16,
+                    border: "none", cursor: "pointer",
+                    background: theme.bg,
+                    boxShadow: btn.id === "wallet" ? theme.shadowInset : theme.shadowRaised,
+                    color: btn.id === "wallet" ? theme.accent : theme.textSecondary,
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    transition: "all 0.3s ease"
+                  }}
+                >
+                  {btn.icon}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      );
+    };
+
     return (
-      <div style={{ padding: "18px 18px 100px" }}>
+      <div style={{ padding: showForm ? "18px 18px 100px" : "0" }}>
         {showForm ? (
           <div style={{ display: "flex", justifyContent: "center", width: "100%" }}>
+
             <NeoSurface style={{ padding: 16, width: "100%", maxWidth: 380, maxHeight: "95vh", overflowY: "auto", display: "flex", flexDirection: "column", gap: 10 }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                 <div style={{ fontSize: 18, fontWeight: 800, color: theme.textPrimary, ...fontDisplay }}>{editingTxId ? "Edit transaction" : "Add transaction"}</div>
@@ -2217,8 +2846,21 @@ export default function NeoApp() {
               }} style={{ marginTop: 4, padding: "12px" }} />
             </NeoSurface>
           </div>
+        ) : expenseView === "wallet" ? (
+          <WalletView />
         ) : (
           <>
+            {/* Back to Wallet button */}
+            <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "18px 18px 0", marginBottom: 8 }}>
+              <button
+                onClick={() => setExpenseView("wallet")}
+                style={{ display: "flex", alignItems: "center", gap: 6, border: "none", background: "none", color: theme.accent, fontWeight: 700, fontSize: 14, cursor: "pointer", padding: 0 }}
+              >
+                <ChevronLeft size={18} /> Wallet
+              </button>
+            </div>
+
+            <div style={{ padding: "0 18px 100px" }}>
             <div style={{ marginBottom: 24, marginTop: 8 }}>
             </div>
 
@@ -3099,8 +3741,8 @@ export default function NeoApp() {
                 </div>
               </div>
             )}
-          </>
-        )}
+
+            </div> {/* end dashboard padding div */}
 
         {/* --- Balance Edit Modal --- */}
         {showEditBalanceModal && editingBalanceAcc && (
@@ -3170,6 +3812,8 @@ export default function NeoApp() {
         )}
 
 
+          </>
+        )}
       </div>
     );
   }
@@ -3507,6 +4151,53 @@ Generate one short, helpful insight about my productivity or finances based ONLY
     todo: new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' }),
   };
 
+  const focusTimerAdapter = {
+    timerState: {
+      isRunning: isRunning,
+      durationSeconds: hours * 3600 + minutes * 60 + seconds || 1,
+      remainingSeconds: remaining,
+    },
+    addTime: (secs) => {
+      const newTotal = (hours * 3600 + minutes * 60 + seconds) + secs;
+      setHours(Math.floor(newTotal / 3600));
+      setMinutes(Math.floor((newTotal % 3600) / 60));
+      setSeconds(newTotal % 60);
+      setRemaining(prev => prev + secs);
+    },
+    setDuration: (secs) => {
+      setHours(Math.floor(secs / 3600));
+      setMinutes(Math.floor((secs % 3600) / 60));
+      setSeconds(secs % 60);
+      setRemaining(secs);
+    },
+    startTimer: () => {
+      stopAlarm();
+      if (!isRunning) {
+        setIsRunning(true);
+        setIsPlaying(true);
+        if (activeSource === 'youtube' && ytPlayerRef.current && ytPlayerRef.current.playVideo) ytPlayerRef.current.playVideo();
+        else if (audioRef.current) audioRef.current.play().catch(e => console.error(e));
+      }
+    },
+    pauseTimer: () => {
+      stopAlarm();
+      if (isRunning) {
+        setIsRunning(false);
+        setIsPlaying(false);
+        if (activeSource === 'youtube' && ytPlayerRef.current && ytPlayerRef.current.pauseVideo) ytPlayerRef.current.pauseVideo();
+        else if (audioRef.current) audioRef.current.pause();
+      }
+    },
+    stopTimer: () => {
+      stopAlarm();
+      setIsRunning(false);
+      setIsPlaying(false);
+      setRemaining(hours * 3600 + minutes * 60 + seconds);
+      if (activeSource === 'youtube' && ytPlayerRef.current && ytPlayerRef.current.pauseVideo) ytPlayerRef.current.pauseVideo();
+      else if (audioRef.current) audioRef.current.pause();
+    }
+  };
+
   return (
     <div style={{ minHeight: "100vh", background: theme.pageBg, ...fontBody }}>
       <style>{`
@@ -3580,7 +4271,7 @@ Generate one short, helpful insight about my productivity or finances based ONLY
           onTouchEnd={onSwipeEnd}
         >
           <div key={activeTab} style={{ animation: `${direction > 0 ? "slideInRight" : "slideInLeft"} 0.25s ease`, flex: "1 0 auto", display: "flex", flexDirection: "column" }}>
-            {activeTab === "summary" && <SummaryTab theme={theme} NeoSurface={NeoSurface} NeoInput={NeoInput} fontDisplay={fontDisplay} fontBody={fontBody} onNavigate={switchTab} transactions={transactions} streak={streak} activeDays={activeDays} monthlyActiveCount={monthlyActiveCount} daysInMonth={streakDaysInMonth} yearlyActiveCount={yearlyActiveCount} daysInYear={daysInYear} onShowForm={() => { switchTab('expense'); setShowForm(true); }} isImporting={isImporting} onImportStatement={handleImportStatement} />}
+            {activeTab === "summary" && <SummaryTab theme={theme} NeoSurface={NeoSurface} NeoInput={NeoInput} fontDisplay={fontDisplay} fontBody={fontBody} onNavigate={switchTab} transactions={transactions} streak={streak} activeDays={activeDays} monthlyActiveCount={monthlyActiveCount} daysInMonth={streakDaysInMonth} yearlyActiveCount={yearlyActiveCount} daysInYear={daysInYear} onShowForm={() => { switchTab('expense'); setShowForm(true); }} isImporting={isImporting} onImportStatement={handleImportStatement} totalBudget={Object.values(categoryBudgets).reduce((sum, b) => sum + (Number(b) || 0), 0)} focusTimer={focusTimerAdapter} />}
             {activeTab === "timer" && renderTimerTab()}
             {activeTab === "meditation" && renderMeditationTab()}
             {activeTab === "expense" && renderExpenseTab()}
@@ -4117,6 +4808,56 @@ Generate one short, helpful insight about my productivity or finances based ONLY
               </button>
             </div>
           ))}
+        </div>
+      )}
+
+      {showNoteModal && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 55, padding: 24 }}>
+          <NeoSurface style={{ padding: 22, width: "100%", maxWidth: 340 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+              <Check size={16} color={theme.accent2} />
+              <span style={{ color: theme.textPrimary, fontWeight: 700, fontSize: 14.5, ...fontDisplay }}>Session complete</span>
+            </div>
+            <div style={{ color: theme.textSecondary, fontSize: 12, marginBottom: 12, ...fontBody }}>What did you get done?</div>
+            <textarea
+              value={sessionNote}
+              onChange={(e) => setSessionNote(e.target.value)}
+              placeholder="e.g. Finished the client report draft"
+              rows={3}
+              style={{ width: "100%", background: theme.bg, boxShadow: theme.shadowPressed, border: "none", borderRadius: 14, padding: "12px 14px", color: theme.textPrimary, fontSize: 13, outline: "none", resize: "none", ...fontBody }}
+            />
+            <div style={{ display: "flex", gap: 10, marginTop: 14 }}>
+              <button onClick={() => { stopAlarm(); setShowNoteModal(false); setSessionNote(""); }} style={{ flex: 1, border: "none", background: theme.bg, boxShadow: theme.shadowRaisedSm, borderRadius: 14, padding: "11px 0", color: theme.textSecondary, fontWeight: 600, fontSize: 13, ...fontBody }}>Skip</button>
+              <PrimaryButton label="Save note" icon={<Check size={15} />} onClick={() => {
+                stopAlarm();
+                setShowNoteModal(false);
+                if (sessionNote.trim()) {
+                  setHistory(h => h.map(item => item.id === currentSessionId ? { ...item, note: sessionNote.trim() } : item));
+                }
+                setSessionNote("");
+              }} style={{ flex: 1 }} />
+            </div>
+          </NeoSurface>
+        </div>
+      )}
+
+      {showDailyGoalModal && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 55, padding: 24 }}>
+          <NeoSurface style={{ padding: 22, width: "100%", maxWidth: 320 }}>
+            <div style={{ color: theme.textPrimary, fontSize: 16, fontWeight: 700, marginBottom: 16, ...fontDisplay }}>Edit daily focus goal</div>
+            <div style={{ color: theme.textSecondary, fontSize: 12, marginBottom: 4, ...fontBody }}>Goal (in minutes)</div>
+            <NeoInput type="number" placeholder="e.g. 240" value={tempDailyGoal} onChange={(e) => setTempDailyGoal(e.target.value)} />
+            <div style={{ display: "flex", gap: 10, marginTop: 16 }}>
+              <button onClick={() => setShowDailyGoalModal(false)} style={{ flex: 1, border: "none", background: theme.bg, boxShadow: theme.shadowRaisedSm, borderRadius: 12, padding: "10px 0", color: theme.textSecondary, fontWeight: 600, fontSize: 13, cursor: "pointer", ...fontBody }}>Cancel</button>
+              <button onClick={() => {
+                const newGoal = parseInt(tempDailyGoal);
+                if (!isNaN(newGoal) && newGoal > 0) {
+                  setDailyGoalMinutes(newGoal);
+                }
+                setShowDailyGoalModal(false);
+              }} style={{ flex: 1, border: "none", background: theme.accent, borderRadius: 12, padding: "10px 0", color: "#fff", fontWeight: 600, fontSize: 13, cursor: "pointer", ...fontBody }}>Save Changes</button>
+            </div>
+          </NeoSurface>
         </div>
       )}
     </div>

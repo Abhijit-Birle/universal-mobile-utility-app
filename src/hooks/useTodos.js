@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { getItem, setItem } from './useStorage.js';
 import { getLocalDateString } from '../utils/date.js';
+import { markDayActive } from '../utils/streak.js';
 
 const STORAGE_KEY = 'ledger_todos';
 const LISTS_KEY = 'ledger_todo_lists';
@@ -110,6 +111,7 @@ export function useTodos() {
       subtasks: [],
       ...todoData
     };
+    markDayActive();
     setTodos(prev => [newTodo, ...prev]);
   }, []);
 
@@ -127,7 +129,10 @@ export function useTodos() {
         }
         return t;
       });
-      if (isCompleting) playDing();
+      if (isCompleting) {
+        playDing();
+        markDayActive();
+      }
       return next;
     });
   }, []);

@@ -8,3 +8,12 @@ export function getLocalDateString(date = new Date()) {
   const localDate = new Date(date.getTime() - offsetMs);
   return localDate.toISOString().split('T')[0];
 }
+
+export const getLocalToday = () => {
+  return getLocalDateString();
+};
+
+export const getLocalTime = () => {
+  const d = new Date();
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+};

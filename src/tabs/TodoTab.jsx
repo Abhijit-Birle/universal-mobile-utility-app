@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import Icon from '../components/ui/Icon.jsx';
 import TaskEditor from '../components/todos/TaskEditor.jsx';
 import { useTodos, generateId } from '../hooks/useTodos.js';
@@ -23,6 +23,24 @@ export default function TodoTab({ theme, NeoSurface, NeoInput, PrimaryButton, Se
   const [quickAddReminder, setQuickAddReminder] = useState('');
   const [quickAddSubtasks, setQuickAddSubtasks] = useState([]);
   
+  const quickAddRef = useRef(null);
+  
+  useEffect(() => {
+    if (!showQuickAddExtras) return;
+    const handleClickOutside = (e) => {
+      // Don't close if clicking within a portal (like date/time picker dialogs) or within the quick add bar
+      if (quickAddRef.current && !quickAddRef.current.contains(e.target)) {
+        setShowQuickAddExtras(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('touchstart', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('touchstart', handleClickOutside);
+    };
+  }, [showQuickAddExtras]);
+
   const todayStr = getLocalDateString();
 
   const smartLists = [
@@ -213,20 +231,6 @@ export default function TodoTab({ theme, NeoSurface, NeoInput, PrimaryButton, Se
       {/* Main Content */}
       <div className="scroll-content" style={{ padding: '12px 18px 100px', flex: 1, display: 'flex', flexDirection: 'column' }}>
         
-        {/* Header */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 24 }}>
-          <Icon name={activeListMeta.icon} size={28} color={activeListMeta.color || theme.accent} />
-          <div>
-            <h2 style={{ fontSize: 28, fontWeight: 700, color: theme.textPrimary, margin: 0, ...fontDisplay }}>
-              {activeListMeta.name}
-            </h2>
-            {currentList === 'myday' && (
-              <p style={{ fontSize: 13, color: theme.textSecondary, margin: '4px 0 0 0', ...fontBody }}>
-                {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
-              </p>
-            )}
-          </div>
-        </div>
 
         {/* Task List */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -252,7 +256,7 @@ export default function TodoTab({ theme, NeoSurface, NeoInput, PrimaryButton, Se
       </div>
 
       {/* Quick Add Bar */}
-      <div style={{ position: 'fixed', bottom: 0, left: 0, width: '100%', zIndex: 10 }}>
+      <div ref={quickAddRef} style={{ position: 'fixed', bottom: 0, left: 0, width: '100%', zIndex: 10 }}>
         {/* Gradient fade above the bar */}
         <div style={{ width: '100%', height: 32, background: `linear-gradient(to top, ${theme.bg}, transparent)` }} />
         

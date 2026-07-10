@@ -1,59 +1,72 @@
-// ─── Capacitor Preferences wrapper ───────────────────────────────────────────
-// Never use window.localStorage directly — it doesn't persist reliably in
-// native WebViews on iOS/Android. All storage goes through this module.
+// ─── IndexedDB Storage Wrapper (idb-keyval) ──────────────────────────────────
+// Used for large data payloads (history, transactions, todos) to avoid
+// blocking the main thread and exceeding localStorage 5-10MB limits.
 
-import { Preferences } from '@capacitor/preferences';
+import { get, set, del, keys } from 'idb-keyval';
 
 /**
- * Get a JSON-parsed value from Preferences.
- * Returns `null` if key doesn't exist.
+ * Get a value from IndexedDB.
+ * Returns `null` if key doesn't exist (matching localStorage behavior).
  */
 export async function getItem(key) {
   try {
-    const { value } = await Preferences.get({ key });
-    if (value === null || value === undefined) return null;
-    return JSON.parse(value);
+    const value = await get(key);
+    if (value !== undefined) return value; // Found in IDB
+
+    // Auto-migrate from localStorage if not found in IDB
+    try {
+      const legacyVal = window.localStorage.getItem(key);
+      if (legacyVal) {
+        const parsed = JSON.parse(legacyVal);
+        await set(key, parsed); // Save to IDB for future
+        window.localStorage.removeItem(key); // Cleanup
+        return parsed;
+      }
+    } catch (e) {
+      console.warn(`Migration failed for ${key}`, e);
+    }
+
+    return null;
   } catch {
     return null;
   }
 }
 
 /**
- * Serialize and store a value in Preferences.
+ * Store a value in IndexedDB.
  */
 export async function setItem(key, value) {
-  await Preferences.set({ key, value: JSON.stringify(value) });
+  await set(key, value);
 }
 
 /**
- * Remove a key from Preferences.
+ * Remove a key from IndexedDB.
  */
 export async function removeItem(key) {
-  await Preferences.remove({ key });
+  await del(key);
 }
 
 /**
- * Get all keys stored in Preferences.
+ * Get all keys stored in IndexedDB.
  */
 export async function getAllKeys() {
-  const { keys } = await Preferences.keys();
-  return keys;
+  return await keys();
 }
 
 /**
  * Export all Ledger data as a single JSON object.
  */
 export async function exportAllData() {
-  const keys = await getAllKeys();
+  const allKeys = await getAllKeys();
   const data = {};
-  for (const key of keys) {
+  for (const key of allKeys) {
     data[key] = await getItem(key);
   }
   return data;
 }
 
 /**
- * Import a previously exported data object back into Preferences.
+ * Import a previously exported data object back into IndexedDB.
  * Overwrites any existing keys.
  */
 export async function importAllData(data) {
@@ -66,11 +79,11 @@ export async function importAllData(data) {
  * Estimate total storage size in bytes by summing serialized value lengths.
  */
 export async function estimateStorageBytes() {
-  const keys = await getAllKeys();
+  const allKeys = await getAllKeys();
   let total = 0;
-  for (const key of keys) {
-    const { value } = await Preferences.get({ key });
-    if (value) total += value.length * 2; // UTF-16 estimate
+  for (const key of allKeys) {
+    const value = await getItem(key);
+    if (value) total += JSON.stringify(value).length * 2; // UTF-16 estimate
   }
   return total;
 }

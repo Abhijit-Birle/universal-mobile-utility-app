@@ -82,16 +82,25 @@ import {
   Building2,
   Box,
   Tag,
-  AlertTriangle
+  AlertTriangle,
+  LayoutDashboard,
+  PiggyBank
 } from "lucide-react";
+import * as LucideIcons from "lucide-react";
 import * as XLSX from "xlsx";
-import Strands from "./components/Strands";
-import BreathingExercise from "./components/BreathingExercise";
-import MoneyTab from "./tabs/MoneyTab.jsx";
+import Strands from "./components/Strands.jsx";
+import BreathingExercise from "./components/BreathingExercise.jsx";
 import TodoTab from "./tabs/TodoTab.jsx";
+import SummaryTab from "./tabs/SummaryTab.jsx";
 import TimePicker from "./components/ui/TimePicker.jsx";
 import NeoSelect from "./components/ui/NeoSelect.jsx";
+import WheelPicker from "./components/ui/WheelPicker.jsx";
 import { useTodos } from "./hooks/useTodos.js";
+import { useAsyncStorage } from "./hooks/useAsyncStorage.js";
+import { useLocalStorage } from "./hooks/useLocalStorage.js";
+import { useStreak } from "./hooks/useStreak.js";
+import { markDayActive } from "./utils/streak.js";
+import SplitText from "./components/ui/SplitText.jsx";
 import { CURRENCIES, formatCurrency, getCurrencyByCode } from "./utils/currency.js";
 import {
   ResponsiveContainer,
@@ -106,19 +115,22 @@ import {
   CartesianGrid,
 } from "recharts";
 
+import { getLocalDateString, getLocalToday, getLocalTime } from "./utils/date.js";
+
+
 /* ---------------------------------- helpers ---------------------------------- */
+
+function getDailyAvgSpend(expenses, days = 30) {
+  const cutoff = Date.now() - days * 86400000;
+  const variable = expenses.filter(e => e.type === "expense" && e.category !== "No Spend" && !e.recurring && new Date(e.date).getTime() >= cutoff);
+  const total = variable.reduce((sum, e) => sum + (parseFloat(e.amount) || 0), 0);
+  return total / days;
+}
 
 const EXPENSE_CATEGORIES = [
   "Food", "Transport", "Shopping", "Bills", "Entertainment", "Health", "Education", "Other",
 ];
-const EXPENSE_CSV_MAP = {
-  Transport: ['uber', 'lyft', 'taxi', 'train', 'flight', 'irctc', 'ola', 'rapido', 'metro'],
-  Food: ['swiggy', 'zomato', 'mcdonalds', 'starbucks', 'cafe', 'restaurant', 'food', 'dominos', 'kfc', 'blinkit', 'instamart', 'zepto'],
-  Shopping: ['amazon', 'flipkart', 'myntra', 'mart', 'store', 'retail', 'supermarket', 'd-mart', 'reliancemart'],
-  Entertainment: ['netflix', 'spotify', 'prime', 'cinema', 'movie', 'bookmyshow', 'pvr', 'hotstar'],
-  Health: ['hospital', 'pharmacy', 'clinic', 'medical', 'apollo', 'practo', 'netmeds', '1mg'],
-  Bills: ['electricity', 'water', 'gas', 'internet', 'broadband', 'airtel', 'jio', 'vi', 'recharge', 'emi', 'bill'],
-};
+
 const INCOME_CATEGORIES = ["Salary", "Freelance", "Business", "Investment", "Gift", "Other"];
 
 const TX_CATEGORY_ICONS = {
@@ -127,49 +139,8 @@ const TX_CATEGORY_ICONS = {
 };
 
 const RENDER_CUSTOM_ICON = (key, size=18) => {
-  switch (key) {
-    case "Box": return <Box size={size} />;
-    case "Tag": return <Tag size={size} />;
-    case "ShoppingCart": return <ShoppingCart size={size} />;
-    case "Car": return <Car size={size} />;
-    case "HeartPulse": return <HeartPulse size={size} />;
-    case "BookOpen": return <BookOpen size={size} />;
-    case "Film": return <Film size={size} />;
-    case "Gift": return <Gift size={size} />;
-    case "Smartphone": return <Smartphone size={size} />;
-    case "Camera": return <Camera size={size} />;
-    case "Music2": return <Music2 size={size} />;
-    case "Dumbbell": return <Dumbbell size={size} />;
-    case "Utensils": return <Utensils size={size} />;
-    case "CreditCard": return <CreditCard size={size} />;
-    case "Target": return <Target size={size} />;
-    case "Award": return <Award size={size} />;
-    case "Wallet": return <Wallet size={size} />;
-    case "Sun": return <Sun size={size} />;
-    case "Moon": return <Moon size={size} />;
-    case "Briefcase": return <Briefcase size={size} />;
-    case "DollarSign": return <DollarSign size={size} />;
-    case "User": return <User size={size} />;
-    case "Banknote": return <Banknote size={size} />;
-    case "Sparkles": return <Sparkles size={size} />;
-    case "Users": return <Users size={size} />;
-    case "Mail": return <Mail size={size} />;
-    case "Calendar": return <Calendar size={size} />;
-    case "FileText": return <FileText size={size} />;
-    case "GraduationCap": return <GraduationCap size={size} />;
-    case "Phone": return <Phone size={size} />;
-    case "Presentation": return <Presentation size={size} />;
-    case "Flag": return <Flag size={size} />;
-    case "Cloud": return <Cloud size={size} />;
-    case "MessageSquare": return <MessageSquare size={size} />;
-    case "Bell": return <Bell size={size} />;
-    case "Landmark": return <Landmark size={size} />;
-    case "Flame": return <Flame size={size} />;
-    case "Flower2": return <Flower2 size={size} />;
-    case "Laptop": return <Laptop size={size} />;
-    case "Building2": return <Building2 size={size} />;
-    default: return <Box size={size} />;
-  }
+  const IconComponent = LucideIcons[key] || LucideIcons.Box;
+  return <IconComponent size={size} />;
 };
 const PRESET_BANKS = [
   { name: "HDFC", color: "#004B8D" },
@@ -180,7 +151,7 @@ const PRESET_BANKS = [
   { name: "PNB", color: "#F7A823" },
   { name: "Baroda", color: "#FF5E00" },
 ];
-const UPI_APPS = ["BHIM", "PhonePe", "GPay", "Paytm"];
+
 const MUSIC_OPTIONS = [
   { id: "piano", label: "Piano" },
   { id: "rain", label: "Rain" },
@@ -224,11 +195,7 @@ const TASK_ICON_RULES = [
   { keywords: ["client", "boss", "office"], icon: Briefcase },
 ];
 
-const CATEGORY_ICONS = {
-  Food: ShoppingCart, Transport: Car, Shopping: ShoppingCart, Bills: FileText,
-  Entertainment: Music2, Health: HeartPulse, Education: GraduationCap, Other: Circle,
-  Salary: Briefcase, Freelance: Presentation, Business: Briefcase, Investment: TrendingUp, Gift: Sparkles,
-};
+
 
 function getTaskIcon(text) {
   const t = text.toLowerCase();
@@ -244,14 +211,14 @@ function fmtClock(totalSeconds) {
   return `${m}:${s}`;
 }
 
-const EXPENSE_KEYWORD_MAP = {
-  Food: ["mcdonalds", "starbucks", "lunch", "dinner", "breakfast", "grocery", "groceries", "swiggy", "zomato", "restaurant", "cafe", "coffee", "pizza", "burger"],
-  Transport: ["uber", "ola", "gas", "petrol", "taxi", "bus", "train", "flight", "metro", "auto"],
-  Bills: ["netflix", "spotify", "wifi", "internet", "electricity", "water", "rent", "emi", "mobile", "recharge", "prime"],
-  Shopping: ["amazon", "flipkart", "myntra", "clothes", "shoes", "electronics", "mall", "zara", "h&m"],
-  Health: ["doctor", "pharmacy", "medicine", "hospital", "gym", "workout", "clinic", "therapy"],
-  Education: ["course", "udemy", "school", "college", "tuition", "books", "coursera"],
-  Entertainment: ["movie", "cinema", "game", "steam", "concert", "party", "club"]
+const CATEGORY_KEYWORD_MAP = {
+  Food: ["swiggy", "zomato", "mcdonalds", "starbucks", "cafe", "restaurant", "food", "dominos", "kfc", "blinkit", "instamart", "zepto", "lunch", "dinner", "breakfast", "grocery", "groceries", "coffee", "pizza", "burger"],
+  Transport: ["uber", "lyft", "taxi", "train", "flight", "irctc", "ola", "rapido", "metro", "gas", "petrol", "bus", "auto"],
+  Shopping: ["amazon", "flipkart", "myntra", "mart", "store", "retail", "supermarket", "d-mart", "reliancemart", "clothes", "shoes", "electronics", "mall", "zara", "h&m"],
+  Entertainment: ["netflix", "spotify", "prime", "cinema", "movie", "bookmyshow", "pvr", "hotstar", "game", "steam", "concert", "party", "club"],
+  Health: ["hospital", "pharmacy", "clinic", "medical", "apollo", "practo", "netmeds", "1mg", "doctor", "medicine", "gym", "workout", "therapy"],
+  Bills: ["electricity", "water", "gas", "internet", "broadband", "airtel", "jio", "vi", "recharge", "emi", "bill", "wifi", "rent", "mobile"],
+  Education: ["course", "udemy", "school", "college", "tuition", "books", "coursera"]
 };
 
 function Numpad({ value, onChange, theme, NeoSurface }) {
@@ -276,45 +243,9 @@ function Numpad({ value, onChange, theme, NeoSurface }) {
 
 /* ---------------------------------- root ---------------------------------- */
 
-const TAB_ORDER = ["timer", "meditation", "expense", "todo"];
+const TAB_ORDER = ["summary", "timer", "meditation", "expense", "todo"];
 
 
-const useLocalStorage = (key, initialValue) => {
-  const [state, setState] = useState(() => {
-    try {
-      const item = window.localStorage.getItem(key);
-      return item ? JSON.parse(item) : initialValue;
-    } catch (error) {
-      return initialValue;
-    }
-  });
-
-  // Write synchronously so there's no async gap where another state update
-  // could fire the storage event and read a stale value back.
-  const setLocalState = useCallback((valueOrUpdater) => {
-    setState(prev => {
-      const next = typeof valueOrUpdater === 'function' ? valueOrUpdater(prev) : valueOrUpdater;
-      try {
-        window.localStorage.setItem(key, JSON.stringify(next));
-      } catch (e) {}
-      return next;
-    });
-  }, [key]);
-
-  // Only sync from other tabs — not from our own writes
-  useEffect(() => {
-    const handleStorageChange = (e) => {
-      if (e.key !== key) return;
-      try {
-        if (e.newValue) setState(JSON.parse(e.newValue));
-      } catch (e) {}
-    };
-    window.addEventListener('storage', handleStorageChange);
-    return () => window.removeEventListener('storage', handleStorageChange);
-  }, [key]);
-
-  return [state, setLocalState];
-};
 
 const MaskedField = ({ label, value, theme, fontBody, isSensitive = false }) => {
   const [show, setShow] = useState(false);
@@ -356,8 +287,8 @@ const MaskedField = ({ label, value, theme, fontBody, isSensitive = false }) => 
 
 export default function NeoApp() {
 
-  const [activeTab, setActiveTab] = useState("timer");
-  const [history, setHistory] = useLocalStorage("neo_history", []);
+  const [activeTab, setActiveTab] = useState("summary");
+  const [history, setHistory, historyLoading] = useAsyncStorage("neo_history", []);
   const [dailyGoalMinutes, setDailyGoalMinutes] = useLocalStorage("neo_dailyGoalMinutes", 240);
   const [hours, setHours] = useState(0);
   const [minutes, setMinutes] = useState(25);
@@ -539,16 +470,17 @@ export default function NeoApp() {
   const [mode, setMode] = useState("focus"); // focus | pomodoro
   const [pomoPhase, setPomoPhase] = useState("Focus"); // Focus | Break
   const [pomoCycle, setPomoCycle] = useState(1);
-  const [streak, setStreak] = useLocalStorage("neo_streak", 3);
+  const { streak, activeDays, monthlyActiveCount, daysInMonth: streakDaysInMonth, yearlyActiveCount, daysInYear } = useStreak();
+  const [transactions, setTransactions, transactionsLoading] = useAsyncStorage("neo_transactions", []);
   const [linkedTodo, setLinkedTodo] = useState(null);
   const [showTodoPicker, setShowTodoPicker] = useState(false);
   const [showNoteModal, setShowNoteModal] = useState(false);
   const [sessionNote, setSessionNote] = useState("");
   const [currentSessionId, setCurrentSessionId] = useState(null);
 
-  const [transactions, setTransactions] = useLocalStorage("neo_transactions", []);
-
+  const migrationDoneRef = useRef(false);
   useEffect(() => {
+    if (migrationDoneRef.current || transactionsLoading) return;
     let hasFoodAndDining = false;
     const migrated = transactions.map(t => {
       if (t.category === "Food & Dining") {
@@ -560,7 +492,8 @@ export default function NeoApp() {
     if (hasFoodAndDining) {
       setTransactions(migrated);
     }
-  }, [transactions, setTransactions]);
+    migrationDoneRef.current = true;
+  }, [transactions, transactionsLoading, setTransactions]);
   const [customCategories, setCustomCategories] = useLocalStorage("neo_custom_categories", []);
   
   useEffect(() => {
@@ -571,21 +504,16 @@ export default function NeoApp() {
 
   const [customCategoryIcons, setCustomCategoryIcons] = useLocalStorage("neo_custom_category_icons", {});
   const [customIncomeCategories, setCustomIncomeCategories] = useLocalStorage("neo_custom_income_categories", []);
-  const ALL_EXPENSE_CATEGORIES = [...EXPENSE_CATEGORIES, ...customCategories];
-  const ALL_INCOME_CATEGORIES = [...INCOME_CATEGORIES, ...customIncomeCategories];
+  const ALL_EXPENSE_CATEGORIES = [...EXPENSE_CATEGORIES, ...(Array.isArray(customCategories) ? customCategories : [])];
+  const ALL_INCOME_CATEGORIES = [...INCOME_CATEGORIES, ...(Array.isArray(customIncomeCategories) ? customIncomeCategories : [])];
   const { todos, incrementPomodoro, toggleDone, updateTodo } = useTodos();
   const [categoryBudgets, setCategoryBudgets] = useLocalStorage("neo_categoryBudgets", {});
-  const [balances, setBalances] = useLocalStorage("neo_balances", { bank: 0, upi: 0 });
-  const [upcomingBills, setUpcomingBills] = useLocalStorage("neo_upcomingBills", []);
+  const [upcomingBills, setUpcomingBills, billsLoading] = useAsyncStorage("neo_upcomingBills", []);
 
   useEffect(() => {
     // Migration to clear dummy bills for existing users
     if (upcomingBills.length === 3 && upcomingBills[0].name === "Netflix" && upcomingBills[1].name === "Electricity Bill" && upcomingBills[2].name === "Rent") {
       setUpcomingBills([]);
-    }
-    // Migration to clear dummy balances for existing users
-    if (balances.bank === 14250.00 && balances.upi === 340.50) {
-      setBalances({ bank: 0, upi: 0 });
     }
   }, []);
   // Timer States
@@ -593,7 +521,7 @@ export default function NeoApp() {
   const [tempDailyGoal, setTempDailyGoal] = useState("");
 
   // Bank Details States
-  const [banks, setBanks] = useLocalStorage("neo_banks", []);
+  const [banks, setBanks, banksLoading] = useAsyncStorage("neo_banks", []);
 
   const BankBadge = ({ tx }) => {
     const method = tx.method;
@@ -620,9 +548,7 @@ export default function NeoApp() {
   };
 
   const updateBalanceForMethod = (method, delta) => {
-    if (method === "UPI") {
-      setBalances(prev => ({ ...prev, upi: (Number(prev.upi) || 0) + delta }));
-    } else {
+    if (method !== "UPI") {
       setBanks(prev => prev.map(b => String(b.id) === String(method) ? { ...b, balance: (Number(b.balance) || 0) + delta } : b));
     }
   };
@@ -672,14 +598,6 @@ export default function NeoApp() {
   const [newExchangeRate, setNewExchangeRate] = useState("1");
   const [newCat, setNewCat] = useState("Food");
   const [newType, setNewType] = useState("expense");
-  const getLocalToday = () => {
-    const d = new Date();
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-  };
-  const getLocalTime = () => {
-    const d = new Date();
-    return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
-  };
   const [newDate, setNewDate] = useState(getLocalToday());
   const [newTime, setNewTime] = useState(getLocalTime());
   const [showCategoryDrawer, setShowCategoryDrawer] = useState(false);
@@ -688,8 +606,6 @@ export default function NeoApp() {
   const [activeAccount, setActiveAccount] = useState("bank");
   const [showBudgetModal, setShowBudgetModal] = useState(false);
   const [showBudgetDropdown, setShowBudgetDropdown] = useState(false);
-  const [editCategory, setEditCategory] = useState("Food");
-  const [editBudgetVal, setEditBudgetVal] = useState("");
   const [activeReminders, setActiveReminders] = useState([]);
 
   // Reminder Logic
@@ -699,19 +615,19 @@ export default function NeoApp() {
     }
 
     const interval = setInterval(() => {
+      const todosWithReminders = todos.filter(t => !t.done && t.reminder && !t.reminderNotified);
+      if (todosWithReminders.length === 0) return;
       const now = new Date();
-      todos.forEach(task => {
-        if (!task.done && task.reminder && !task.reminderNotified) {
-          const reminderTime = new Date(task.reminder);
-          if (now >= reminderTime) {
-            // Trigger Notification
-            if ("Notification" in window && Notification.permission === "granted") {
-              new Notification("Todo Reminder", { body: task.text });
-            }
-            // Trigger In-App Alert
-            setActiveReminders(prev => [...prev, task]);
-            updateTodo(task.id, { reminderNotified: true });
+      todosWithReminders.forEach(task => {
+        const reminderTime = new Date(task.reminder);
+        if (now >= reminderTime) {
+          // Trigger Notification
+          if ("Notification" in window && Notification.permission === "granted") {
+            new Notification("Todo Reminder", { body: task.text });
           }
+          // Trigger In-App Alert
+          setActiveReminders(prev => [...prev, task]);
+          updateTodo(task.id, { reminderNotified: true });
         }
       });
     }, 10000); // Check every 10 seconds for testing responsiveness
@@ -726,11 +642,11 @@ export default function NeoApp() {
   const [darkMode, setDarkMode] = useLocalStorage("neo_darkMode", false);
   const [baseCurrency, setBaseCurrency] = useLocalStorage("neo_baseCurrency", "INR");
 
-  const searchIndex = [
+  const searchIndex = useMemo(() => [
     ...transactions.map(t => ({ type: "expense", icon: t.type === 'expense' ? ShoppingCart : Landmark, label: t.name, meta: `${formatCurrency(t.amount, baseCurrency)} · ${t.date}`, item: t })),
     ...todos.map(t => ({ type: "todo", icon: FileText, label: t.text, meta: `${t.priority} priority`, item: t })),
     ...history.map(h => ({ type: "session", icon: TimerIcon, label: h.note || h.type, meta: `${h.minutes}m · ${h.date}`, item: h }))
-  ];
+  ], [transactions, todos, history, baseCurrency]);
 
   // Sync today's tasks to Capacitor Preferences for Android Widget
   useEffect(() => {
@@ -753,8 +669,6 @@ export default function NeoApp() {
 
   // Planner States
 
-  const [monthlySummary, setMonthlySummary] = useState("");
-
 
   // Insights States
   const [query, setQuery] = useState("");
@@ -771,20 +685,12 @@ export default function NeoApp() {
   const [apiKey, setApiKey] = useLocalStorage("neo_gemini_api_key", "");
   const [direction, setDirection] = useState(1);
   const [showInsights, setShowInsights] = useState(false);
-  const [showWidget, setShowWidget] = useState(false);
+
   const [showSettings, setShowSettings] = useState(false);
   const [showRuleModal, setShowRuleModal] = useState(false);
   const [showWipeConfirm, setShowWipeConfirm] = useState(false);
-  const [toastMessage, setToastMessage] = useState("");
 
-  useEffect(() => {
-    if (toastMessage) {
-      const timer = setTimeout(() => setToastMessage(""), 3000);
-      return () => clearTimeout(timer);
-    }
-  }, [toastMessage]);
 
-  const [syncState, setSyncState] = useState("synced"); // synced | syncing
   const [customCategoryRules, setCustomCategoryRules] = useLocalStorage("neo_custom_category_rules", []);
   
   // Statement Import State
@@ -808,7 +714,7 @@ export default function NeoApp() {
   const [pendingImportFiles, setPendingImportFiles] = useState([]);
   const [showImportCelebration, setShowImportCelebration] = useState(false);
   const [importedCount, setImportedCount] = useState(0);
-  const [lastImportSnapshot, setLastImportSnapshot] = useLocalStorage("neo_lastImportSnapshot", null);
+  const [lastImportSnapshot, setLastImportSnapshot, importSnapshotLoading] = useAsyncStorage("neo_lastImportSnapshot", null);
   const touchData = useRef({ x: 0, y: 0, active: false });
 
   // Handle Hardware Back Button (Android)
@@ -1003,7 +909,7 @@ export default function NeoApp() {
     />
   ), [theme]);
 
-  const CollapsibleSection = useCallback(({ title, defaultOpen = true, children, extraHeader }) => {
+  const CollapsibleSection = ({ title, defaultOpen = true, children, extraHeader }) => {
     const [isOpen, setIsOpen] = useState(defaultOpen);
     
     return (
@@ -1045,13 +951,13 @@ export default function NeoApp() {
           opacity: isOpen ? 1 : 0,
           pointerEvents: isOpen ? "auto" : "none"
         }}>
-          <div style={{ overflow: "hidden" }}>
+          <div style={{ overflow: "hidden", padding: 32, margin: -32 }}>
             {children}
           </div>
         </div>
       </div>
     );
-  }, [theme]);
+  };
 
   const SectionLabel = useCallback(({ children, style }) => (
     <div style={{ color: theme.textSecondary, fontSize: 13, fontWeight: 700, letterSpacing: 0.5, textTransform: "uppercase", marginBottom: 12, ...fontDisplay, ...style }}>
@@ -1059,78 +965,7 @@ export default function NeoApp() {
     </div>
   ), [theme]);
 
-  const WheelPicker = useCallback(({ options, value, onChange, label, disabled = false, width = 60, fontSize = 24, formatOption }) => {
-    const containerRef = useRef(null);
-    const itemHeight = 44;
 
-    useEffect(() => {
-      const idx = options.indexOf(value);
-      if (idx !== -1 && containerRef.current) {
-        if (disabled) {
-          containerRef.current.scrollTo({ top: idx * itemHeight, behavior: 'smooth' });
-        } else {
-          containerRef.current.scrollTop = idx * itemHeight;
-        }
-      }
-    }, [value, options, disabled]);
-
-    const handleScroll = (e) => {
-      const idx = Math.round(e.target.scrollTop / itemHeight);
-      if (options[idx] !== undefined && options[idx] !== value) {
-        onChange(options[idx]);
-        if (!disabled) {
-          try {
-            Haptics.impact({ style: ImpactStyle.Light });
-          } catch (err) { }
-        }
-      }
-    };
-
-    return (
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        <div
-          ref={containerRef}
-          onScroll={handleScroll}
-          style={{
-            height: itemHeight * 3,
-            width: width,
-            overflowY: 'auto',
-            scrollSnapType: 'y mandatory',
-            scrollbarWidth: 'none',
-            msOverflowStyle: 'none',
-            position: 'relative',
-            pointerEvents: disabled ? 'none' : 'auto'
-          }}
-        >
-          <div style={{ height: itemHeight }} /> {/* padding top */}
-          {options.map((opt) => (
-            <div
-              key={opt}
-              style={{
-                height: itemHeight,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                scrollSnapAlign: 'center',
-                fontSize: fontSize,
-                fontWeight: 700,
-                color: opt === value ? theme.textPrimary : theme.textSecondary,
-                opacity: opt === value ? 1 : 0.3,
-                transition: 'all 0.2s',
-                ...fontDisplay
-              }}
-            >
-              {formatOption ? formatOption(opt) : opt.toString().padStart(2, '0')}
-            </div>
-          ))}
-          <div style={{ height: itemHeight }} /> {/* padding bottom */}
-        </div>
-        <div style={{ color: theme.textSecondary, fontSize: 14, fontWeight: 600, ...fontBody }}>
-          {label}
-        </div>
-      </div>
-    );
-  }, [theme]);
 
   const NeoDatePicker = useCallback(({ value, onChange, style, placeholder, wrapperStyle }) => {
     const [open, setOpen] = useState(false);
@@ -1791,7 +1626,7 @@ export default function NeoApp() {
     setShowImportConsent(false);
     setIsImporting(true);
     setImportErrorMsg("");
-    setToastMessage(`Processing ${files.length} file(s)...`);
+
     try {
       const ai = new GoogleGenAI({ apiKey });
       const newReviews = [];
@@ -1932,7 +1767,7 @@ export default function NeoApp() {
     } catch (err) {
       console.error("Import error:", err);
       const msg = "Import failed: " + (err.message || String(err));
-      setToastMessage(msg);
+
       setImportErrorMsg(msg);
     } finally {
       setIsImporting(false);
@@ -1940,21 +1775,37 @@ export default function NeoApp() {
   };
 
 
-  const renderExpenseTab = () => {
+  const methodIcon = (m) => {
+    if (!m) return null;
+    if (m === "UPI") return <Smartphone size={14} />;
+    return <Landmark size={14} />;
+  };
+  const methodLabel = (m) => {
+    if (!m) return "";
+    if (m === "UPI") return "UPI";
+    const bank = banks.find(b => String(b.id) === String(m));
+    return bank ? bank.bankName : "Bank";
+  };
 
+  const dailyAvgSpend = useMemo(() => getDailyAvgSpend(transactions, 30), [transactions]);
 
-    const methodIcon = (m) => {
-      if (!m) return null;
-      if (m === "UPI") return <Smartphone size={14} />;
-      return <Landmark size={14} />;
-    };
-    const methodLabel = (m) => {
-      if (!m) return "";
-      if (m === "UPI") return "UPI";
-      const bank = banks.find(b => String(b.id) === String(m));
-      return bank ? bank.bankName : "Bank";
-    };
-
+  const {
+    currentMonthTx,
+    spentThisMonth,
+    incomeThisMonth,
+    netSavings,
+    monthlyBurnRate,
+    spentByCategory,
+    pieData,
+    categoryPieData,
+    txByDay,
+    dayFiltered,
+    targetYearStr,
+    targetMonthStr,
+    monthLabel,
+    daysInMonth,
+    BUDGETS
+  } = useMemo(() => {
     const now = new Date();
     const targetDate = new Date(now.getFullYear(), now.getMonth() + monthOffset, 1);
     const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -2010,14 +1861,10 @@ export default function NeoApp() {
         txByDay[day].push(t);
       }
     });
-    let dayFiltered = [...transactions];
     
-    if (filterStartDate) {
-      dayFiltered = dayFiltered.filter(t => t.date >= filterStartDate);
-    }
-    if (filterEndDate) {
-      dayFiltered = dayFiltered.filter(t => t.date <= filterEndDate);
-    }
+    let dayFiltered = [...transactions];
+    if (filterStartDate) dayFiltered = dayFiltered.filter(t => t.date >= filterStartDate);
+    if (filterEndDate) dayFiltered = dayFiltered.filter(t => t.date <= filterEndDate);
 
     if (!filterStartDate && !filterEndDate && selectedDate) {
       dayFiltered = dayFiltered.filter((t) => {
@@ -2026,31 +1873,39 @@ export default function NeoApp() {
       });
     }
 
-    if (filterType !== "All") {
-      dayFiltered = dayFiltered.filter(t => t.type === filterType.toLowerCase());
-    }
-    if (filterBank !== "All") {
-      dayFiltered = dayFiltered.filter(t => String(t.method) === String(filterBank));
-    }
-    if (filterCategory !== "All") {
-      dayFiltered = dayFiltered.filter(t => t.category === filterCategory);
-    }
+    if (filterType !== "All") dayFiltered = dayFiltered.filter(t => t.type === filterType.toLowerCase());
+    if (filterBank !== "All") dayFiltered = dayFiltered.filter(t => String(t.method) === String(filterBank));
+    if (filterCategory !== "All") dayFiltered = dayFiltered.filter(t => t.category === filterCategory);
 
     // Sort descending by date
     dayFiltered.sort((a, b) => new Date(b.date) - new Date(a.date));
 
-    const handleImportStatement = (e) => {
-      const files = Array.from(e.target.files || []);
-      if (!files.length) return;
-      e.target.value = '';
-      if (!apiKey) {
-        setShowKeyModal(true);
-        setToastMessage("⚠️ Please set your Gemini API key first.");
-        return;
-      }
-      setPendingImportFiles(files);
-      setShowImportConsent(true);
+    return {
+      currentMonthTx, spentThisMonth, incomeThisMonth, netSavings, monthlyBurnRate,
+      spentByCategory, pieData, categoryPieData, txByDay, dayFiltered,
+      targetYearStr, targetMonthStr, monthLabel, daysInMonth, BUDGETS
     };
+  }, [
+    transactions, monthOffset, theme, upcomingBills, categoryBudgets, 
+    filterStartDate, filterEndDate, selectedDate, filterType, filterBank, filterCategory
+  ]);
+
+  const handleImportStatement = (e) => {
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+    e.target.value = '';
+    if (!apiKey) {
+      setShowKeyModal(true);
+      alert("⚠️ Please set your Gemini API key first.");
+      return;
+    }
+    setPendingImportFiles(files);
+    setShowImportConsent(true);
+  };
+
+  const renderExpenseTab = () => {
+
+    const now = new Date();
 
 
     const exportFilteredDataToCSV = () => {
@@ -2085,7 +1940,24 @@ export default function NeoApp() {
       const [offset, setOffset] = React.useState(0);
       const startX = React.useRef(0);
       const dragging = React.useRef(false);
+      const rowRef = React.useRef(null);
       const THRESHOLD = 60;
+      
+      React.useEffect(() => {
+        if (offset === 0) return;
+        const handleClickOutside = (e) => {
+          if (rowRef.current && !rowRef.current.contains(e.target)) {
+            setOffset(0);
+          }
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        document.addEventListener('touchstart', handleClickOutside);
+        return () => {
+          document.removeEventListener('mousedown', handleClickOutside);
+          document.removeEventListener('touchstart', handleClickOutside);
+        };
+      }, [offset]);
+
       const onTouchStart = (e) => { e.stopPropagation(); startX.current = e.touches[0].clientX; dragging.current = true; };
       const onTouchMove = (e) => {
         if (!dragging.current) return;
@@ -2099,7 +1971,7 @@ export default function NeoApp() {
         setOffset(o => o < -THRESHOLD / 2 ? -THRESHOLD : 0);
       };
       return (
-        <div style={{ position: 'relative', ...style }}>
+        <div ref={rowRef} style={{ position: 'relative', ...style }}>
           {/* delete bg */}
           <div style={{ 
             position: 'absolute', 
@@ -2155,7 +2027,7 @@ export default function NeoApp() {
     const handleDescChange = (val) => {
       setNewDesc(val);
       const lower = val.toLowerCase();
-      for (const [cat, keywords] of Object.entries(EXPENSE_KEYWORD_MAP)) {
+      for (const [cat, keywords] of Object.entries(CATEGORY_KEYWORD_MAP)) {
         if (keywords.some(k => lower.includes(k))) {
           setNewCat(cat);
           break;
@@ -2276,9 +2148,12 @@ export default function NeoApp() {
                       </div>
                     ))}
                     
-                    {newType === "expense" && (
+                    {(newType === "expense" || newType === "income") && (
                       <div
-                        onClick={() => setShowCategoryForm(true)}
+                        onClick={() => {
+                          setNewCategoryType(newType);
+                          setShowCategoryForm(true);
+                        }}
                         style={{
                           display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 4,
                           cursor: "pointer", padding: "10px 4px", borderRadius: 12, background: theme.bg, boxShadow: theme.shadowRaisedSm, transition: "all 0.2s"
@@ -2335,6 +2210,7 @@ export default function NeoApp() {
                         newArr.sort((a, b) => new Date(b.date) - new Date(a.date));
                         return newArr;
                     });
+                    markDayActive();
                   }
                   closeForm();
                 }
@@ -2346,34 +2222,146 @@ export default function NeoApp() {
             <div style={{ marginBottom: 24, marginTop: 8 }}>
             </div>
 
-            <NeoSurface style={{ padding: 20, marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center', position: 'relative', overflow: 'hidden' }}>
-              <div>
-                <div style={{ fontSize: 13, color: theme.textSecondary, fontWeight: 600 }}>{netSavings > 0 ? "Savings this month" : "Net Cashflow"}</div>
-                <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
-                  <div style={{ color: theme.textPrimary, fontSize: 24, fontWeight: 700, ...fontDisplay }}>
-                    {netSavings > 0 ? "+" : netSavings < 0 ? "-" : ""}{formatCurrency(Math.abs(netSavings), baseCurrency)}
+            {/* Row 1: Net Cashflow + Saved/Streak card */}
+            <div style={{ display: 'flex', gap: 16, marginBottom: 24 }}>
+              <NeoSurface style={{ flex: 6, padding: 20, display: 'flex', justifyContent: 'space-between', alignItems: 'center', position: 'relative', overflow: 'hidden' }}>
+                <div>
+                  <div style={{ fontSize: 13, color: theme.textSecondary, fontWeight: 600 }}>{netSavings > 0 ? "Savings this month" : "Net Cashflow"}</div>
+                  <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
+                    <div style={{ color: theme.textPrimary, fontSize: 24, fontWeight: 700, ...fontDisplay }}>
+                      {netSavings > 0 ? "+" : netSavings < 0 ? "-" : ""}{formatCurrency(Math.abs(netSavings), baseCurrency)}
+                    </div>
+                  </div>
+                  <div style={{ marginTop: 8 }}>
+                    <div style={{ fontSize: 12, color: theme.textSecondary }}>Income: <span style={{ color: theme.success, fontWeight: 600 }}>{formatCurrency(incomeThisMonth, baseCurrency)}</span></div>
+                    <div style={{ fontSize: 12, color: theme.textSecondary, marginTop: 4 }}>Spent: <span style={{ color: theme.danger, fontWeight: 600 }}>{formatCurrency(spentThisMonth, baseCurrency)}</span></div>
                   </div>
                 </div>
-                <div style={{ marginTop: 8 }}>
-                  <div style={{ fontSize: 12, color: theme.textSecondary }}>Income: <span style={{ color: theme.success, fontWeight: 600 }}>{formatCurrency(incomeThisMonth, baseCurrency)}</span></div>
-                  <div style={{ fontSize: 12, color: theme.textSecondary, marginTop: 4 }}>Spent: <span style={{ color: theme.danger, fontWeight: 600 }}>{formatCurrency(spentThisMonth, baseCurrency)}</span></div>
-                </div>
-              </div>
 
-              {pieData.length > 0 && (
-                <div style={{ display: 'flex', justifyContent: 'center' }}>
-                  <PieChart width={80} height={80}>
-                    <Pie data={pieData} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={25} outerRadius={35} stroke="none" paddingAngle={5}>
-                      {pieData.map((entry, index) => <Cell key={`cell-${index}`} fill={entry.fill} />)}
-                    </Pie>
-                  </PieChart>
-                </div>
-              )}
-              {pieData.length === 0 && (
-                <div style={{ color: theme.textSecondary, fontSize: 12 }}>No Data</div>
-              )}
-            </NeoSurface>
+                {pieData.length > 0 && (
+                  <div style={{ display: 'flex', justifyContent: 'center' }}>
+                    <PieChart width={80} height={80}>
+                      <Pie data={pieData} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={25} outerRadius={35} stroke="none" paddingAngle={5}>
+                        {pieData.map((entry, index) => <Cell key={`cell-${index}`} fill={entry.fill} />)}
+                      </Pie>
+                    </PieChart>
+                  </div>
+                )}
+                {pieData.length === 0 && (
+                  <div style={{ color: theme.textSecondary, fontSize: 12 }}>No Data</div>
+                )}
+              </NeoSurface>
 
+              {/* No-Spend Day Square Card */}
+              {(() => {
+                const noSpendCount = currentMonthTx.filter(t => t.category === "No Spend").length;
+                const noSpendTxToday = transactions.find(t => t.category === "No Spend" && t.date === getLocalToday());
+                const hasNoSpendToday = !!noSpendTxToday;
+                
+                const dailyAvg = getDailyAvgSpend(transactions, 30);
+                const savedAmount = Math.round(dailyAvg * noSpendCount);
+                
+                return (
+                  <NeoSurface 
+                    onClick={async () => {
+                      if (hasNoSpendToday) {
+                        setTransactions(t => t.filter(x => x.id !== noSpendTxToday.id));
+                        try { await Haptics.impact({ style: ImpactStyle.Light }); } catch (e) {}
+                      } else {
+                        const noSpendTx = {
+                          id: Date.now(),
+                          type: 'expense',
+                          amount: 0,
+                          originalAmount: 0,
+                          originalCurrency: baseCurrency,
+                          exchangeRate: 1,
+                          name: 'No-Spend Day 🎉',
+                          desc: 'Claimed a No-Spend day!',
+                          category: 'No Spend',
+                          method: 'UPI',
+                          date: getLocalToday(),
+                          time: getLocalTime(),
+                        };
+                        setTransactions(t => {
+                          const newArr = [noSpendTx, ...t];
+                          newArr.sort((a, b) => new Date(b.date) - new Date(a.date));
+                          return newArr;
+                        });
+                        markDayActive();
+                        try { await Haptics.impact({ style: ImpactStyle.Heavy }); } catch (e) {}
+                      }
+                    }}
+                    pressed={hasNoSpendToday}
+                    style={{
+                      flex: 4, padding: "20px", cursor: "pointer", borderRadius: 20, position: "relative",
+                      background: hasNoSpendToday ? theme.success + '15' : theme.bg,
+                      border: hasNoSpendToday ? `1px solid ${theme.success}30` : 'none',
+                      transition: 'all 0.3s ease'
+                    }}
+                  >
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 16 }}>
+                      <div
+                        style={{
+                          width: 44, height: 44, borderRadius: "50%", 
+                          background: hasNoSpendToday ? theme.success : theme.bg,
+                          boxShadow: hasNoSpendToday ? 'none' : theme.shadowRaisedSm, 
+                          display: "flex", alignItems: "center", justifyContent: "center",
+                          color: hasNoSpendToday ? '#fff' : theme.accent,
+                          transition: 'all 0.3s ease'
+                        }}
+                      >
+                        <PiggyBank size={18} strokeWidth={2.5} />
+                      </div>
+                      
+                      <div style={{ display: 'flex', gap: 4, marginTop: 12 }}>
+                        {Array.from({ length: 7 }).map((_, i) => {
+                          const d = new Date();
+                          d.setDate(d.getDate() - (6 - i));
+                          const ds = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+                          const claimed = transactions.some(t => t.category === "No Spend" && t.date === ds);
+                          const dayLabel = d.toLocaleDateString('en-US', { weekday: 'narrow' });
+                          return (
+                            <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
+                              <div style={{
+                                width: 12, height: 16, borderRadius: 4,
+                                background: claimed ? theme.success : theme.bg,
+                                boxShadow: claimed ? theme.shadowRaisedSm : theme.shadowInset,
+                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                transition: 'all 0.3s ease'
+                              }}>
+                                {claimed && <Check size={8} color={theme.bg} strokeWidth={4} />}
+                              </div>
+                              <div style={{ fontSize: 9, color: claimed ? theme.textSecondary : theme.textSecondary + '70', fontWeight: 600 }}>
+                                {dayLabel}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                    <div>
+                      <div style={{ color: theme.textSecondary, fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 4, ...fontBody }}>Saved</div>
+                      <div style={{ color: hasNoSpendToday ? theme.success : theme.textPrimary, fontSize: 24, fontWeight: 700, ...fontDisplay, display: 'flex', alignItems: 'center' }}>
+                        <span style={{ fontSize: 14, marginRight: 2 }}>{getCurrencyByCode(baseCurrency).symbol}</span>
+                        <SplitText
+                          text={String(savedAmount)}
+                          delay={50}
+                          duration={0.8}
+                          ease="back.out(1.7)"
+                          from={{ opacity: 0, y: 15 }}
+                          to={{ opacity: 1, y: 0 }}
+                        />
+                      </div>
+                      <div style={{ color: theme.textSecondary, fontSize: 10, marginTop: 4, ...fontBody, display: 'flex', flexDirection: 'column', gap: 2 }}>
+                        <span>{noSpendCount} days claimed</span>
+                      </div>
+                    </div>
+                  </NeoSurface>
+                );
+              })()}
+            </div>
+
+            {/* Row 2: Expenses by Category */}
             {categoryPieData.length > 0 ? (
               <NeoSurface style={{ padding: 20, marginBottom: 24, display: 'flex', flexDirection: 'column', gap: 16, position: 'relative', overflow: 'hidden' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', zIndex: 10 }}>
@@ -2449,7 +2437,8 @@ export default function NeoApp() {
               </NeoSurface>
             )}
 
-            <div onTouchStart={(e) => e.stopPropagation()} onMouseDown={(e) => e.stopPropagation()} style={{ display: "flex", gap: 16, overflowX: "auto", paddingBottom: 16, scrollbarWidth: "none", msOverflowStyle: "none" }}>
+            {/* Row 3: All Banks and Safe-to-Spend */}
+            <div style={{ display: "flex", gap: 16, overflowX: "auto", paddingBottom: 16, scrollbarWidth: "none", msOverflowStyle: "none", marginBottom: 24 }}>
               {/* Bank card — icon opens bank list, total = sum of all bank balances */}
               {(() => {
                 const bankTotal = banks.reduce((s, b) => s + (parseFloat(b.balance) || 0), 0);
@@ -2473,36 +2462,44 @@ export default function NeoApp() {
                 );
               })()}
 
-              {/* UPI card — icon opens edit-balance modal */}
-              <NeoSurface
-                onClick={(e) => {
-                  const acc = { id: "upi", label: "UPI", icon: Smartphone, balance: balances.upi };
-                  if (e.target.closest('.edit-btn')) {
-                    handleEditBalance(acc);
-                  } else {
-                      setActiveAccount("upi"); 
-                      setEditingBalanceAcc(acc);
-                      setTempBalance(acc.balance.toString());
-                      setShowEditBalanceModal(true);
-                  }
-                }} pressed={activeAccount === "upi"} style={{ minWidth: 145, flex: 1, padding: "20px", cursor: "pointer", borderRadius: 20, position: "relative" }}>
+              {/* Safe-to-Spend Card */}
+              {(() => {
+                const bankTotal = banks.reduce((s, b) => s + (parseFloat(b.balance) || 0), 0);
+                const billsTotal = upcomingBills.reduce((s, b) => s + (parseFloat(b.amount) || 0), 0);
+                const reserve = 0; // Future savings goal integration
+                const today = new Date();
+                const lastDay = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate();
+                const daysLeft = lastDay - today.getDate() + 1; // Including today
+                const safeToSpendDaily = Math.max(0, (bankTotal - billsTotal - reserve) / daysLeft);
+                
+                return (
+                  <NeoSurface style={{ minWidth: 145, flex: 1, padding: "20px", borderRadius: 20, position: "relative" }}>
                     <div
                       style={{
                         width: 44, height: 44, borderRadius: "50%", background: theme.bg,
                         boxShadow: theme.shadowRaisedSm, display: "flex", alignItems: "center", justifyContent: "center",
-                        marginBottom: 16, color: theme.accent
+                        marginBottom: 16, color: theme.success
                       }}
                     >
-                      <Smartphone size={18} strokeWidth={2.5} />
+                      <Target size={18} strokeWidth={2.5} />
                     </div>
                     <div>
-                      <div style={{ color: theme.textSecondary, fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 4, ...fontBody }}>UPI</div>
-                      <div style={{ color: theme.textPrimary, fontSize: 24, fontWeight: 700, ...fontDisplay }}>{formatCurrency(balances.upi || 0, baseCurrency)}</div>
+                      <div style={{ color: theme.textSecondary, fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 4, ...fontBody }}>Safe to spend</div>
+                      <div style={{ color: theme.textPrimary, fontSize: 24, fontWeight: 700, ...fontDisplay, display: 'flex', alignItems: 'baseline' }}>
+                        {formatCurrency(safeToSpendDaily, baseCurrency)}
+                        <span style={{ fontSize: 14, color: theme.textSecondary, fontWeight: 600, marginLeft: 2 }}>/d</span>
+                      </div>
+                      <div style={{ color: theme.textSecondary, fontSize: 10, marginTop: 4, ...fontBody }}>
+                        Balance - Bills • {daysLeft} days left
+                      </div>
                     </div>
                   </NeoSurface>
+                );
+              })()}
             </div>
 
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 8, marginBottom: 32 }}>
+            {/* Row 4: Spent this month + New button */}
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 32 }}>
               <div>
                 <div style={{ color: theme.textSecondary, fontSize: 13, marginBottom: 4, ...fontBody }}>Spent this month</div>
                 <div style={{ color: theme.textPrimary, fontSize: 32, fontWeight: 800, letterSpacing: -0.5, ...fontDisplay }}>
@@ -2585,8 +2582,41 @@ export default function NeoApp() {
 
             <CollapsibleSection title="Recent transactions" defaultOpen={true}>
               <div style={{ display: "flex", flexDirection: "column", gap: 12, marginBottom: 24 }}>
-                {transactions.slice(0, 4).map((t) => {
-                  const isExp = t.type === "expense";
+                {transactions.length === 0 ? (
+                  <NeoSurface style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "32px 16px", borderRadius: 24, gap: 12 }}>
+                    <div style={{ width: 48, height: 48, borderRadius: "50%", background: `${theme.accent}15`, color: theme.accent, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                      <ListChecks size={24} />
+                    </div>
+                    <div style={{ textAlign: "center" }}>
+                      <div style={{ color: theme.textPrimary, fontSize: 15, fontWeight: 700, ...fontDisplay, marginBottom: 4 }}>No recent transactions</div>
+                      <div style={{ color: theme.textSecondary, fontSize: 13, ...fontBody }}>Add a new transaction to see it here.</div>
+                    </div>
+                  </NeoSurface>
+                ) : (
+                  transactions.slice(0, 4).map((t) => {
+                    const isExp = t.type === "expense";
+                    
+                    if (t.category === "No Spend") {
+                      const savings = Math.round(getDailyAvgSpend(transactions, 30));
+                      return (
+                        <SwipeRow key={t.id} onDelete={() => deleteTx(t.id)}>
+                          <div onClick={() => openEdit(t)} style={{ padding: 16, display: "flex", alignItems: "center", gap: 14, borderRadius: 20, cursor: "pointer", background: '#111713', border: `1px solid ${theme.success}10`, boxShadow: theme.shadowRaisedSm }}>
+                            <div style={{ width: 40, height: 40, borderRadius: 12, background: '#18241d', display: "flex", alignItems: "center", justifyContent: "center" }}>
+                              <Flame size={18} color={theme.success} />
+                            </div>
+                            <div style={{ flex: 1 }}>
+                              <div style={{ color: '#fff', fontSize: 14, fontWeight: 700, ...fontBody, marginBottom: 2 }}>{t.name}</div>
+                              <div style={{ color: theme.success, opacity: 0.7, fontSize: 11, ...fontBody }}>{t.desc} • {t.date}</div>
+                            </div>
+                            <div style={{ textAlign: "right", display: 'flex', flexDirection: 'column', alignItems: 'flex-end', justifyContent: 'center' }}>
+                              <div style={{ fontSize: 14, fontWeight: 700, color: theme.success, ...fontBody }}>+{getCurrencyByCode(baseCurrency).symbol}{savings}</div>
+                              <div style={{ color: theme.success, opacity: 0.6, fontSize: 10, ...fontBody, marginTop: 2 }}>saved</div>
+                            </div>
+                          </div>
+                        </SwipeRow>
+                      );
+                    }
+
                   return (
                     <SwipeRow key={t.id} onDelete={() => deleteTx(t.id)}>
                       <NeoSurface onClick={() => openEdit(t)} style={{ padding: 16, display: "flex", alignItems: "center", gap: 14, borderRadius: 20, cursor: "pointer" }}>
@@ -2606,7 +2636,7 @@ export default function NeoApp() {
                       </NeoSurface>
                     </SwipeRow>
                   );
-                })}
+                }))}
               </div>
             </CollapsibleSection>
 
@@ -2653,7 +2683,8 @@ export default function NeoApp() {
                             setShowBillModal(true);
                           }} style={{ padding: "12px 14px", display: "flex", alignItems: "center", gap: 10, borderRadius: 20, cursor: "pointer" }}>
                         <div style={{ width: 36, height: 36, borderRadius: 12, flexShrink: 0, background: theme.bg, boxShadow: theme.shadowRaisedSm, display: "flex", alignItems: "center", justifyContent: "center", color: daysUntilDue <= 3 ? theme.danger : theme.accent }}>
-                          <Bell size={16} />
+                          {/* ponytail: show category-specific icon if matches an expense category, otherwise bell */}
+                          {TX_CATEGORY_ICONS[b.name] || (customCategoryIcons[b.name] ? RENDER_CUSTOM_ICON(customCategoryIcons[b.name], 16) : <Bell size={16} />)}
                         </div>
                         <div style={{ flex: 1 }}>
                           <div style={{ color: theme.textPrimary, fontWeight: 600, fontSize: 13.5, ...fontBody }}>{b.name}</div>
@@ -2734,27 +2765,42 @@ export default function NeoApp() {
                 </NeoSurface>
               )}
               
-              <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "flex-start", alignItems: "center", gap: 8, marginBottom: 16 }}>
-                <select value={filterType} onChange={e => setFilterType(e.target.value)} style={{ flexShrink: 0, padding: "6px 8px", borderRadius: 10, background: theme.bg, color: theme.textPrimary, border: "none", boxShadow: theme.shadowInset, fontSize: 11, fontWeight: 600, outline: "none", ...fontBody }}>
-                  <option value="All">All Types</option>
-                  <option value="Income">Income</option>
-                  <option value="Expense">Expense</option>
-                </select>
-                <select value={filterBank} onChange={e => setFilterBank(e.target.value)} style={{ flexShrink: 0, padding: "6px 8px", borderRadius: 10, background: theme.bg, color: theme.textPrimary, border: "none", boxShadow: theme.shadowInset, fontSize: 11, fontWeight: 600, outline: "none", ...fontBody }}>
-                  <option value="All">All Banks</option>
-                  <option value="UPI">UPI</option>
-                  {banks.map(b => <option key={b.id} value={b.id}>{b.bankName.substring(0, 10)}</option>)}
-                </select>
-                <select value={filterCategory} onChange={e => { setFilterCategory(e.target.value); setVisibleTxCount(20); }} style={{ flexShrink: 0, padding: "6px 8px", borderRadius: 10, background: theme.bg, color: theme.textPrimary, border: "none", boxShadow: theme.shadowInset, fontSize: 11, fontWeight: 600, outline: "none", ...fontBody }}>
-                  <option value="All">All Categories</option>
-                  {[...new Set(transactions.map(t => t.category))].map(c => <option key={c} value={c}>{c}</option>)}
-                </select>
-                <NeoDatePicker value={filterStartDate} onChange={setFilterStartDate} placeholder="From" style={{ height: 28, fontSize: 10, padding: "4px 8px", minWidth: 70 }} wrapperStyle={{ flex: "1 1 70px" }} />
-                <NeoDatePicker value={filterEndDate} onChange={setFilterEndDate} placeholder="To" style={{ height: 28, fontSize: 10, padding: "4px 8px", minWidth: 70 }} wrapperStyle={{ flex: "1 1 70px" }} />
-              </div>
+              {transactions.length > 0 && (
+                <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "flex-start", alignItems: "center", gap: 8, marginBottom: 16 }}>
+                  <select value={filterType} onChange={e => setFilterType(e.target.value)} style={{ flexShrink: 0, padding: "6px 8px", borderRadius: 10, background: theme.bg, color: theme.textPrimary, border: "none", boxShadow: theme.shadowInset, fontSize: 11, fontWeight: 600, outline: "none", ...fontBody }}>
+                    <option value="All">All Types</option>
+                    <option value="Income">Income</option>
+                    <option value="Expense">Expense</option>
+                  </select>
+                  <select value={filterBank} onChange={e => setFilterBank(e.target.value)} style={{ flexShrink: 0, padding: "6px 8px", borderRadius: 10, background: theme.bg, color: theme.textPrimary, border: "none", boxShadow: theme.shadowInset, fontSize: 11, fontWeight: 600, outline: "none", ...fontBody }}>
+                    <option value="All">All Banks</option>
+                    <option value="UPI">UPI</option>
+                    {banks.map(b => <option key={b.id} value={b.id}>{b.bankName.substring(0, 10)}</option>)}
+                  </select>
+                  <select value={filterCategory} onChange={e => { setFilterCategory(e.target.value); setVisibleTxCount(20); }} style={{ flexShrink: 0, padding: "6px 8px", borderRadius: 10, background: theme.bg, color: theme.textPrimary, border: "none", boxShadow: theme.shadowInset, fontSize: 11, fontWeight: 600, outline: "none", ...fontBody }}>
+                    <option value="All">All Categories</option>
+                    {[...new Set(transactions.map(t => t.category))].map(c => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                  <NeoDatePicker value={filterStartDate} onChange={setFilterStartDate} placeholder="From" style={{ height: 28, fontSize: 10, padding: "4px 8px", minWidth: 70 }} wrapperStyle={{ flex: "1 1 70px" }} />
+                  <NeoDatePicker value={filterEndDate} onChange={setFilterEndDate} placeholder="To" style={{ height: 28, fontSize: 10, padding: "4px 8px", minWidth: 70 }} wrapperStyle={{ flex: "1 1 70px" }} />
+                </div>
+              )}
 
             <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                 {(() => {
+                  if (dayFiltered.length === 0) {
+                    return (
+                      <NeoSurface style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "40px 16px", borderRadius: 24, gap: 12, marginTop: 16 }}>
+                        <div style={{ width: 48, height: 48, borderRadius: "50%", background: `${theme.accent}15`, color: theme.accent, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                          <Search size={24} />
+                        </div>
+                        <div style={{ textAlign: "center" }}>
+                          <div style={{ color: theme.textPrimary, fontSize: 15, fontWeight: 700, ...fontDisplay, marginBottom: 4 }}>No transactions found</div>
+                          <div style={{ color: theme.textSecondary, fontSize: 13, ...fontBody }}>{transactions.length === 0 ? "Add a new transaction to get started." : "Try adjusting your filters."}</div>
+                        </div>
+                      </NeoSurface>
+                    );
+                  }
                   const displayedTxs = dayFiltered.slice(0, visibleTxCount);
                   const grouped = {};
                   displayedTxs.forEach(t => {
@@ -2793,38 +2839,62 @@ export default function NeoApp() {
                                     {new Date(t.date).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}
                                   </div>
                                 )}
-                                <SwipeRow onDelete={() => deleteTx(t.id)}>
-                                  <NeoSurface onClick={() => openEdit(t)} style={{ padding: "12px 14px", display: "flex", alignItems: "center", gap: 10, borderRadius: 20, cursor: "pointer" }}>
-                                    <div style={{
-                                      width: 36, height: 36, borderRadius: 12, flexShrink: 0, background: theme.bg,
-                                      boxShadow: theme.shadowRaisedSm, display: "flex", alignItems: "center", justifyContent: "center",
-                                      fontSize: 16
-                                    }}>
-                                      {TX_CATEGORY_ICONS[t.category] || (customCategoryIcons[t.category] ? RENDER_CUSTOM_ICON(customCategoryIcons[t.category], 16) : <Box size={16} />)}
-                                    </div>
-                                    <div style={{ display: "flex", flexDirection: "column", gap: 3, flex: 1 }}>
-                                      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                                        <span style={{ color: theme.textPrimary, fontWeight: 600, fontSize: 13.5, ...fontBody }}>{t.category}</span>
-                                        <BankBadge tx={t} />
-                                        {t.recurring && <Repeat size={12} color={theme.textSecondary} />}
-                                        {t.split && <Split size={12} color={theme.accent} />}
+                                {t.category === "No Spend" ? (
+                                  <SwipeRow onDelete={() => deleteTx(t.id)}>
+                                    <div onClick={() => openEdit(t)} style={{ padding: "12px 14px", display: "flex", alignItems: "center", gap: 10, borderRadius: 20, cursor: "pointer", background: '#111713', border: `1px solid ${theme.success}10`, boxShadow: theme.shadowRaisedSm }}>
+                                      <div style={{ width: 36, height: 36, borderRadius: 12, flexShrink: 0, background: '#18241d', display: "flex", alignItems: "center", justifyContent: "center" }}>
+                                        <Flame size={16} color={theme.success} />
                                       </div>
-                                      <div style={{ display: "flex", alignItems: "center", gap: 8, color: theme.textSecondary, fontSize: 11, ...fontBody }}>
-                                        <span>{t.name}</span>
+                                      <div style={{ display: "flex", flexDirection: "column", gap: 3, flex: 1 }}>
+                                        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                                          <span style={{ color: '#fff', fontWeight: 600, fontSize: 13.5, ...fontBody }}>{t.name}</span>
+                                        </div>
+                                        <div style={{ display: "flex", alignItems: "center", gap: 8, color: theme.success, opacity: 0.7, fontSize: 11, ...fontBody }}>
+                                          <span>{t.desc} • {t.date}</span>
+                                        </div>
+                                      </div>
+                                      <div style={{ textAlign: "right", display: 'flex', flexDirection: 'column', alignItems: 'flex-end', justifyContent: 'center' }}>
+                                        <span style={{ fontSize: 14, fontWeight: 700, color: theme.success, ...fontBody }}>
+                                          +{getCurrencyByCode(baseCurrency).symbol}{Math.round(dailyAvgSpend)}
+                                        </span>
+                                        <span style={{ color: theme.success, opacity: 0.6, fontSize: 10, ...fontBody, marginTop: 2 }}>saved</span>
+                                      </div>
+                                    </div>
+                                  </SwipeRow>
+                                ) : (
+                                  <SwipeRow onDelete={() => deleteTx(t.id)}>
+                                    <NeoSurface onClick={() => openEdit(t)} style={{ padding: "12px 14px", display: "flex", alignItems: "center", gap: 10, borderRadius: 20, cursor: "pointer" }}>
+                                      <div style={{
+                                        width: 36, height: 36, borderRadius: 12, flexShrink: 0, background: theme.bg,
+                                        boxShadow: theme.shadowRaisedSm, display: "flex", alignItems: "center", justifyContent: "center",
+                                        fontSize: 16
+                                      }}>
+                                        {TX_CATEGORY_ICONS[t.category] || (customCategoryIcons[t.category] ? RENDER_CUSTOM_ICON(customCategoryIcons[t.category], 16) : <Box size={16} />)}
+                                      </div>
+                                      <div style={{ display: "flex", flexDirection: "column", gap: 3, flex: 1 }}>
+                                        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                                          <span style={{ color: theme.textPrimary, fontWeight: 600, fontSize: 13.5, ...fontBody }}>{t.category}</span>
+                                          <BankBadge tx={t} />
+                                          {t.recurring && <Repeat size={12} color={theme.textSecondary} />}
+                                          {t.split && <Split size={12} color={theme.accent} />}
+                                        </div>
+                                        <div style={{ display: "flex", alignItems: "center", gap: 8, color: theme.textSecondary, fontSize: 11, ...fontBody }}>
+                                          <span>{t.name}</span>
 
-                                        {t.originalCurrency && t.originalCurrency !== baseCurrency && (
-                                          <span style={{ color: theme.textSecondary }}>· {formatCurrency(t.originalAmount, t.originalCurrency)}</span>
-                                        )}
-                                        {t.split && <span style={{ color: theme.accent }}>· split with {t.splitWith}</span>}
+                                          {t.originalCurrency && t.originalCurrency !== baseCurrency && (
+                                            <span style={{ color: theme.textSecondary }}>· {formatCurrency(t.originalAmount, t.originalCurrency)}</span>
+                                          )}
+                                          {t.split && <span style={{ color: theme.accent }}>· split with {t.splitWith}</span>}
+                                        </div>
                                       </div>
-                                    </div>
-                                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                                      <span style={{ fontSize: 14, fontWeight: 700, color: t.type === "income" ? theme.success : theme.danger, ...fontBody }}>
-                                        {t.type === "income" ? "+" : "-"}{formatCurrency(t.amount, baseCurrency)}
-                                      </span>
-                                    </div>
-                                  </NeoSurface>
-                                </SwipeRow>
+                                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                                        <span style={{ fontSize: 14, fontWeight: 700, color: t.type === "income" ? theme.success : theme.danger, ...fontBody }}>
+                                          {t.type === "income" ? "+" : "-"}{formatCurrency(t.amount, baseCurrency)}
+                                        </span>
+                                      </div>
+                                    </NeoSurface>
+                                  </SwipeRow>
+                                )}
                               </div>
                             );
                           })}
@@ -3060,8 +3130,15 @@ export default function NeoApp() {
               <div style={{ color: theme.textPrimary, fontSize: 18, fontWeight: 700, marginBottom: 16, ...fontDisplay }}>{editingBill ? "Edit Bill" : "Add Bill"}</div>
 
               <div style={{ marginBottom: 12 }}>
-                <div style={{ color: theme.textSecondary, fontSize: 12, marginBottom: 4, ...fontBody }}>Bill Name</div>
-                <NeoInput type="text" placeholder="e.g. Netflix" value={billFormState.name} onChange={(e) => setBillFormState({ ...billFormState, name: e.target.value })} />
+                <div style={{ color: theme.textSecondary, fontSize: 12, marginBottom: 4, ...fontBody }}>Bill Category</div>
+                {/* ponytail: replace free text with neomorphic NeoSelect category selector */}
+                <NeoSelect
+                  value={billFormState.name || ALL_EXPENSE_CATEGORIES[0]}
+                  onChange={(val) => setBillFormState({ ...billFormState, name: val })}
+                  options={ALL_EXPENSE_CATEGORIES.map(c => ({ value: c, label: c }))}
+                  theme={theme}
+                  fontBody={fontBody}
+                />
               </div>
 
               <div style={{ display: "flex", flexDirection: "column" }}>
@@ -3078,11 +3155,12 @@ export default function NeoApp() {
                 <button onClick={() => setShowBillModal(false)} style={{ flex: 1, border: "none", background: theme.bg, boxShadow: theme.shadowRaisedSm, borderRadius: 12, padding: "12px 0", color: theme.textSecondary, fontWeight: 600, fontSize: 14, cursor: "pointer", ...fontBody }}>Cancel</button>
                 <PrimaryButton label="Save" onClick={() => {
                   const { name, amount, daysLeft } = billFormState;
-                  if (!name.trim() || isNaN(parseFloat(amount)) || isNaN(parseInt(daysLeft))) return;
+                  const billName = name || ALL_EXPENSE_CATEGORIES[0];
+                  if (!billName.trim() || isNaN(parseFloat(amount)) || isNaN(parseInt(daysLeft))) return;
                   if (editingBill) {
-                    setUpcomingBills(bills => bills.map(x => x.id === editingBill.id ? { ...x, name, amount: parseFloat(amount), daysLeft: parseInt(daysLeft) } : x));
+                    setUpcomingBills(bills => bills.map(x => x.id === editingBill.id ? { ...x, name: billName, amount: parseFloat(amount), daysLeft: parseInt(daysLeft) } : x));
                   } else {
-                    setUpcomingBills(b => [...b, { id: Date.now(), name, amount: parseFloat(amount), daysLeft: parseInt(daysLeft) }]);
+                    setUpcomingBills(b => [...b, { id: Date.now(), name: billName, amount: parseFloat(amount), daysLeft: parseInt(daysLeft) }]);
                   }
                   setShowBillModal(false);
                 }} style={{ flex: 1, padding: "12px 0", borderRadius: 12, fontSize: 14 }} />
@@ -3285,25 +3363,9 @@ Generate one short, helpful insight about my productivity or finances based ONLY
                 <User size={24} />
               </div>
               <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 16, fontWeight: 700, color: theme.textPrimary, ...fontDisplay }}>Abhijit Birle</div>
+                <div style={{ fontSize: 16, fontWeight: 700, color: theme.textPrimary, ...fontDisplay }}>Local User</div>
                 <div style={{ fontSize: 13, color: theme.textSecondary, ...fontBody }}>Local User Profile</div>
               </div>
-            </div>
-
-            {/* Cloud Sync */}
-            <div
-              onClick={() => { setSyncState("syncing"); setTimeout(() => setSyncState("synced"), 1200); }}
-              style={{ display: "flex", alignItems: "center", justifyContent: "space-between", background: theme.bg, padding: 16, borderRadius: 16, boxShadow: theme.shadowRaisedSm, cursor: "pointer" }}
-            >
-              <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                <Cloud size={18} color={theme.textPrimary} />
-                <span style={{ fontSize: 15, fontWeight: 600, color: theme.textPrimary, ...fontBody }}>Cloud Sync</span>
-              </div>
-              {syncState === "syncing" ? (
-                <span style={{ fontSize: 13, color: theme.textSecondary, ...fontBody }}>Syncing...</span>
-              ) : (
-                <div style={{ width: 8, height: 8, borderRadius: "50%", background: theme.accent2 }} />
-              )}
             </div>
 
             {/* Manage Categories */}
@@ -3318,17 +3380,7 @@ Generate one short, helpful insight about my productivity or finances based ONLY
               <ChevronDown size={16} color={theme.textSecondary} style={{ transform: "rotate(-90deg)" }} />
             </div>
 
-            {/* Widget Preview */}
-            <div
-              onClick={() => { setShowSettings(false); setShowWidget(true); }}
-              style={{ display: "flex", alignItems: "center", justifyContent: "space-between", background: theme.bg, padding: 16, borderRadius: 16, boxShadow: theme.shadowRaisedSm, cursor: "pointer" }}
-            >
-              <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                <Layers size={18} color={theme.textPrimary} />
-                <span style={{ fontSize: 15, fontWeight: 600, color: theme.textPrimary, ...fontBody }}>Widget Preview</span>
-              </div>
-              <ChevronDown size={16} color={theme.textSecondary} style={{ transform: "rotate(-90deg)" }} />
-            </div>
+
 
             {/* Base Currency */}
             <div
@@ -3405,74 +3457,7 @@ Generate one short, helpful insight about my productivity or finances based ONLY
     );
   }
 
-  /* ---------------------------------- WIDGET PREVIEW ---------------------------------- */
 
-  function WidgetPreviewModal() {
-    return (
-      <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 60, padding: 24 }}>
-        <NeoSurface style={{ padding: 22, width: "100%", maxWidth: 340 }}>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <Layers size={17} color={theme.accent} />
-              <span style={{ color: theme.textPrimary, fontWeight: 700, fontSize: 14.5, ...fontDisplay }}>Home screen widget</span>
-            </div>
-            <button onClick={() => setShowWidget(false)} style={{ border: "none", background: "none", color: theme.textSecondary }}><X size={18} /></button>
-          </div>
-
-          <div style={{ background: theme.bg, boxShadow: theme.shadowRaised, borderRadius: 24, padding: 16 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-              <svg width={56} height={56}>
-                <circle cx="28" cy="28" r="23" fill="none" stroke={darkMode ? "#1b1e25" : "#c9cfda"} strokeWidth="7" />
-                <circle cx="28" cy="28" r="23" fill="none" stroke={theme.accent} strokeWidth="7" strokeLinecap="round"
-                  strokeDasharray={2 * Math.PI * 23} strokeDashoffset={2 * Math.PI * 23 * 0.38} transform="rotate(-90 28 28)" />
-                <text x="28" y="32" textAnchor="middle" fontSize="12" fontWeight="700" fill={theme.textPrimary} style={fontDisplay}>15:32</text>
-              </svg>
-              <div>
-                <div style={{ color: theme.textPrimary, fontWeight: 700, fontSize: 13, ...fontDisplay }}>Focus running</div>
-                <div style={{ color: theme.textSecondary, fontSize: 11, ...fontBody }}>Afternoon Deep Work</div>
-              </div>
-            </div>
-            <div style={{ marginTop: 14, borderTop: `1px solid ${darkMode ? "#323848" : "#c9cfda"}`, paddingTop: 10, display: "flex", flexDirection: "column", gap: 8 }}>
-              <div style={{ color: theme.textSecondary, fontSize: 10, fontWeight: 700, letterSpacing: 0.5, textTransform: "uppercase", ...fontBody }}>Top 3 todos</div>
-              {["Send client project report", "Buy groceries", "Revise chapter 4 notes"].map((t) => (
-                <div key={t} style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  <Circle size={10} color={theme.accent} />
-                  <span style={{ color: theme.textPrimary, fontSize: 12, ...fontBody }}>{t}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-          <div style={{ color: theme.textSecondary, fontSize: 11.5, marginTop: 12, lineHeight: 1.5, ...fontBody }}>
-            Add this widget from your phone's home screen editor to see your live timer and top tasks at a glance.
-          </div>
-        </NeoSurface>
-
-        {/* Undo Last Import */}
-        {lastImportSnapshot && Date.now() - lastImportSnapshot.timestamp < 86400000 && (
-          <div style={{ background: theme.bg, borderRadius: 16, padding: 16, marginTop: 12, boxShadow: theme.shadowRaisedSm, border: `1px solid ${theme.border}` }}>
-            <div style={{ fontSize: 13, fontWeight: 700, color: theme.textPrimary, ...fontDisplay, marginBottom: 6 }}>↩️ Undo Last Import</div>
-            <div style={{ fontSize: 12, color: theme.textSecondary, ...fontBody, marginBottom: 12 }}>
-              {lastImportSnapshot.count} transactions imported. You can undo this for{" "}
-              <strong>{Math.ceil((86400000 - (Date.now() - lastImportSnapshot.timestamp)) / 3600000)}h</strong> more.
-            </div>
-            <button
-              onClick={() => {
-                setTransactions(prev => prev.filter(t => !lastImportSnapshot.ids.includes(t.id)));
-                updateBalanceForMethod(lastImportSnapshot.method, -lastImportSnapshot.balanceDelta);
-                setLastImportSnapshot(null);
-                setToastMessage("↩️ Import undone successfully");
-                setTimeout(() => setToastMessage(""), 3000);
-                setShowSettings(false);
-              }}
-              style={{ width: "100%", padding: "10px", borderRadius: 12, border: "none", background: theme.danger + "22", color: theme.danger, fontWeight: 700, fontSize: 13, ...fontBody, cursor: "pointer" }}
-            >
-              Undo Import
-            </button>
-          </div>
-        )}
-      </div>
-    );
-  }
 
   /* ---------------------------------- API KEY MODAL ---------------------------------- */
 
@@ -3507,17 +3492,19 @@ Generate one short, helpful insight about my productivity or finances based ONLY
   /* ---------------------------------- LAYOUT ---------------------------------- */
 
   const TABS = [
+    { id: "summary", label: "Home", icon: LayoutDashboard },
     { id: "timer", label: "Timer", icon: TimerIcon },
-    { id: "meditation", label: "Meditation", icon: Flower2 },
+    { id: "meditation", label: "Zen", icon: Flower2 },
     { id: "expense", label: "Expense", icon: Wallet },
     { id: "todo", label: "Todo", icon: ListChecks },
   ];
-  const titles = { timer: "Focus Timer", meditation: "Mindfulness", expense: "Expense Tracker", todo: "Today's Tasks" };
+  const titles = { summary: "Dashboard", timer: "Focus Timer", meditation: "Mindfulness", expense: "Expense Tracker", todo: "Tasks" };
   const subtitles = {
+    summary: "Your life at a glance",
     timer: "Stay in the zone",
     meditation: "Breathe, relax, and center yourself",
     expense: apiKey ? "Synced with AI insight engine" : "Track every rupee",
-    todo: "Auto-sorted for you",
+    todo: new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' }),
   };
 
   return (
@@ -3593,6 +3580,7 @@ Generate one short, helpful insight about my productivity or finances based ONLY
           onTouchEnd={onSwipeEnd}
         >
           <div key={activeTab} style={{ animation: `${direction > 0 ? "slideInRight" : "slideInLeft"} 0.25s ease`, flex: "1 0 auto", display: "flex", flexDirection: "column" }}>
+            {activeTab === "summary" && <SummaryTab theme={theme} NeoSurface={NeoSurface} NeoInput={NeoInput} fontDisplay={fontDisplay} fontBody={fontBody} onNavigate={switchTab} transactions={transactions} streak={streak} activeDays={activeDays} monthlyActiveCount={monthlyActiveCount} daysInMonth={streakDaysInMonth} yearlyActiveCount={yearlyActiveCount} daysInYear={daysInYear} onShowForm={() => { switchTab('expense'); setShowForm(true); }} isImporting={isImporting} onImportStatement={handleImportStatement} />}
             {activeTab === "timer" && renderTimerTab()}
             {activeTab === "meditation" && renderMeditationTab()}
             {activeTab === "expense" && renderExpenseTab()}
@@ -3666,13 +3654,19 @@ Generate one short, helpful insight about my productivity or finances based ONLY
                 onClick={() => {
                   const catName = newCategoryName.trim();
                   if (catName) {
-                    if (newCategoryType === "income" && !ALL_INCOME_CATEGORIES.includes(catName)) {
-                      setCustomIncomeCategories(prev => [...prev, catName]);
-                      setCustomCategoryIcons(prev => ({...prev, [catName]: newCategoryIcon}));
+                    if (newCategoryType === "income") {
+                      if (!ALL_INCOME_CATEGORIES.includes(catName)) {
+                        setCustomIncomeCategories(prev => [...(Array.isArray(prev) ? prev : []), catName]);
+                        setCustomCategoryIcons(prev => ({...prev, [catName]: newCategoryIcon}));
+                      }
+                      setNewType("income");
                       setNewCat(catName); // Auto-select it
-                    } else if (newCategoryType === "expense" && !ALL_EXPENSE_CATEGORIES.includes(catName)) {
-                      setCustomCategories(prev => [...prev, catName]);
-                      setCustomCategoryIcons(prev => ({...prev, [catName]: newCategoryIcon}));
+                    } else if (newCategoryType === "expense") {
+                      if (!ALL_EXPENSE_CATEGORIES.includes(catName)) {
+                        setCustomCategories(prev => [...(Array.isArray(prev) ? prev : []), catName]);
+                        setCustomCategoryIcons(prev => ({...prev, [catName]: newCategoryIcon}));
+                      }
+                      setNewType("expense");
                       setNewCat(catName); // Auto-select it
                     }
                   }
@@ -3695,7 +3689,7 @@ Generate one short, helpful insight about my productivity or finances based ONLY
               <button onClick={() => setShowManageCategories(false)} style={{ background: "transparent", border: "none", color: theme.textSecondary }}><X size={20} /></button>
             </div>
             
-            {customCategories.length === 0 ? (
+            {customCategories.length === 0 && customIncomeCategories.length === 0 ? (
               <div style={{ textAlign: "center", padding: 30, color: theme.textSecondary, ...fontBody }}>No custom categories added yet.</div>
             ) : (
               <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
@@ -3705,11 +3699,31 @@ Generate one short, helpful insight about my productivity or finances based ONLY
                       <span style={{ display: "flex", alignItems: "center", justifyContent: "center", width: 24, height: 24, color: theme.textSecondary }}>
                         {customCategoryIcons[cat] ? RENDER_CUSTOM_ICON(customCategoryIcons[cat], 20) : <Box size={20} />}
                       </span>
-                      <span style={{ fontSize: 15, fontWeight: 600, color: theme.textPrimary }}>{cat}</span>
+                      <span style={{ fontSize: 15, fontWeight: 600, color: theme.textPrimary }}>{cat} <span style={{ fontSize: 10, color: theme.textSecondary, marginLeft: 4 }}>(Expense)</span></span>
                     </div>
                     <button 
                       onClick={() => {
                         setCustomCategories(prev => prev.filter(c => c !== cat));
+                        setTransactions(prev => prev.map(t => t.category === cat ? { ...t, category: "Other" } : t));
+                        setCustomCategoryIcons(prev => { const copy = {...prev}; delete copy[cat]; return copy; });
+                      }} 
+                      style={{ background: "transparent", border: "none", color: theme.danger, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", padding: 8 }}
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
+                ))}
+                {customIncomeCategories.map(cat => (
+                  <div key={cat} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 16px", borderRadius: 16, background: theme.bg, boxShadow: theme.shadowInset }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                      <span style={{ display: "flex", alignItems: "center", justifyContent: "center", width: 24, height: 24, color: theme.textSecondary }}>
+                        {customCategoryIcons[cat] ? RENDER_CUSTOM_ICON(customCategoryIcons[cat], 20) : <Box size={20} />}
+                      </span>
+                      <span style={{ fontSize: 15, fontWeight: 600, color: theme.textPrimary }}>{cat} <span style={{ fontSize: 10, color: theme.textSecondary, marginLeft: 4 }}>(Income)</span></span>
+                    </div>
+                    <button 
+                      onClick={() => {
+                        setCustomIncomeCategories(prev => prev.filter(c => c !== cat));
                         setTransactions(prev => prev.map(t => t.category === cat ? { ...t, category: "Other" } : t));
                         setCustomCategoryIcons(prev => { const copy = {...prev}; delete copy[cat]; return copy; });
                       }} 
@@ -3788,7 +3802,7 @@ Generate one short, helpful insight about my productivity or finances based ONLY
                 setBanks(prev => prev.map(b => ({ ...b, balance: 0 })));
                 setShowWipeConfirm(false);
                 setShowSettings(false);
-                setToastMessage("Transactions cleared successfully");
+
               }} style={{ flex: 1, padding: "12px", borderRadius: 12, border: "none", background: theme.danger, color: "#fff", fontWeight: 600, ...fontBody, cursor: "pointer" }}>Wipe Data</button>
             </div>
           </NeoSurface>
@@ -3873,7 +3887,7 @@ Generate one short, helpful insight about my productivity or finances based ONLY
                     }
                     setImportReviews(prev => prev.slice(1));
                   } catch (err) {
-                    setToastMessage("Error skipping file: " + err.message);
+
                   }
               }} style={{ flex: 1, padding: "12px", borderRadius: 12, border: "none", background: theme.bg, color: theme.textSecondary, boxShadow: theme.shadowRaisedSm, fontWeight: 600, ...fontBody, cursor: "pointer" }}>Skip File</button>
               
@@ -3884,7 +3898,7 @@ Generate one short, helpful insight about my productivity or finances based ONLY
                 const bankName = editableBankName.trim();
                 
                 if (!bankName) {
-                    setToastMessage("Please enter a valid Bank Name to save these transactions.");
+                    alert("Please enter a valid Bank Name to save these transactions.");
                     return;
                 }
 
@@ -3964,11 +3978,11 @@ Generate one short, helpful insight about my productivity or finances based ONLY
                 }
                 
                 setImportReviews(prev => prev.slice(1));
-                setToastMessage(`Saved ${txsToSave.length} transactions to: ${bankName || 'Default Bank'}`);
+
                 setShowImportCelebration(true);
                 setTimeout(() => setShowImportCelebration(false), 4000);
                 } catch (err) {
-                    setToastMessage("Error saving: " + err.message);
+
                 }
               }} style={{ flex: 1, padding: "12px", borderRadius: 12, border: "none", background: theme.accent, color: "#fff", fontWeight: 700, ...fontBody, cursor: "pointer" }}>
                 {importReviews.length > 1 ? "Save & Next" : "Save All"}
@@ -3978,14 +3992,6 @@ Generate one short, helpful insight about my productivity or finances based ONLY
         </div>
         );
       })()}
-
-      {/* TOAST NOTIFICATION */}
-      {toastMessage && (
-        <div style={{ position: "fixed", bottom: 20, left: "50%", transform: "translateX(-50%)", background: theme.textPrimary, color: theme.bg, padding: "12px 24px", borderRadius: 30, fontSize: 14, fontWeight: 600, ...fontBody, zIndex: 100, boxShadow: theme.shadowRaisedLg, animation: "fadeIn 0.3s ease-out" }}>
-          {toastMessage}
-        </div>
-      )}
-
 
       {/* IMPORT CONSENT MODAL */}
       {showImportConsent && (
@@ -4047,8 +4053,7 @@ Generate one short, helpful insight about my productivity or finances based ONLY
                   setTransactions(prev => prev.filter(t => !lastImportSnapshot.ids.includes(t.id)));
                   updateBalanceForMethod(lastImportSnapshot.method, -lastImportSnapshot.balanceDelta);
                   setLastImportSnapshot(null);
-                  setToastMessage("↩️ Import undone successfully");
-                  setTimeout(() => setToastMessage(""), 3000);
+
                 }
                 setShowImportCelebration(false);
               }} style={{ flex: 1, padding: "12px", borderRadius: 30, border: `1px solid ${theme.border}`, background: "transparent", color: theme.textSecondary, fontWeight: 600, fontSize: 13, ...fontBody, cursor: "pointer" }}>
@@ -4083,7 +4088,6 @@ Generate one short, helpful insight about my productivity or finances based ONLY
       )}
 
       {showInsights && <InsightsOverlay />}
-      {showWidget && <WidgetPreviewModal />}
 
       {/* In-App Reminder Alerts */}
       {activeReminders.length > 0 && (

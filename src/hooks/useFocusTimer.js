@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { getItem, setItem } from './useStorage.js';
 import { getDateStr } from './useRoutine.js';
+import { markDayActive } from '../utils/streak.js';
 
 const STORAGE_KEY = 'ledger_focus_timer';
 
@@ -133,20 +134,25 @@ export function useFocusTimer() {
   }, [timerState, persist]);
   
   const saveSession = useCallback((title, durationSecs, dateStr) => {
-    const newSession = {
-      id: `session_${Date.now()}`,
-      title: title || 'Focus Session',
-      durationSeconds: durationSecs,
-      date: dateStr || getDateStr(),
-    };
-    persist({
-      ...timerState,
-      isRunning: false,
-      endTime: null,
-      remainingSeconds: timerState.durationSeconds,
-      history: [...timerState.history, newSession],
+    setTimerState(prev => {
+      const newSession = {
+        id: `session_${Date.now()}`,
+        title: title || 'Focus Session',
+        durationSeconds: durationSecs,
+        date: dateStr || getDateStr(),
+      };
+      const next = {
+        ...prev,
+        isRunning: false,
+        endTime: null,
+        remainingSeconds: prev.durationSeconds,
+        history: [...prev.history, newSession],
+      };
+      setItem(STORAGE_KEY, next);
+      markDayActive();
+      return next;
     });
-  }, [timerState, persist]);
+  }, []);
 
   const deleteHistoryItem = useCallback((sessionId) => {
     persist({

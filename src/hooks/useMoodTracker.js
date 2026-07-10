@@ -1,4 +1,6 @@
 import { useState, useEffect } from 'react';
+import { getItem, setItem } from './useStorage.js';
+import { markDayActive } from '../utils/streak.js';
 
 const STORAGE_KEY = 'ledger-mood-tracker';
 
@@ -6,55 +8,33 @@ export function useMoodTracker() {
   const [moodLogs, setMoodLogs] = useState({});
 
   useEffect(() => {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    if (saved) {
-      try {
-        setMoodLogs(JSON.parse(saved));
-      } catch (e) {
-        console.error('Failed to parse mood logs', e);
-      }
-    }
+    getItem(STORAGE_KEY).then(saved => {
+      if (saved) setMoodLogs(saved);
+    });
   }, []);
-
-  const saveLogs = (newLogs) => {
-    setMoodLogs(newLogs);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(newLogs));
-  };
 
   const addLog = (dateStr, moodValue, stressValue, note = '') => {
     const entry = {
       id: `mood_${Date.now()}`,
       timestamp: Date.now(),
-      mood: moodValue,     // 1 to 5
-      stress: stressValue, // 1 to 5
+      mood: moodValue,
+      stress: stressValue,
       note,
     };
 
     setMoodLogs(prev => {
-      const dateLogs = prev[dateStr] || [];
-      const updated = {
-        ...prev,
-        [dateStr]: [...dateLogs, entry],
-      };
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+      const updated = { ...prev, [dateStr]: [...(prev[dateStr] || []), entry] };
+      setItem(STORAGE_KEY, updated);
+      markDayActive();
       return updated;
     });
   };
 
-  const getLogsForDate = (dateStr) => {
-    return moodLogs[dateStr] || [];
-  };
-
+  const getLogsForDate = (dateStr) => moodLogs[dateStr] || [];
   const getLatestLogForDate = (dateStr) => {
     const logs = moodLogs[dateStr] || [];
-    if (logs.length === 0) return null;
-    return logs[logs.length - 1]; // Array append order puts latest at end
+    return logs.length === 0 ? null : logs[logs.length - 1];
   };
 
-  return {
-    moodLogs,
-    addLog,
-    getLogsForDate,
-    getLatestLogForDate
-  };
+  return { moodLogs, addLog, getLogsForDate, getLatestLogForDate };
 }

@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence, Reorder } from 'framer-motion';
 import * as LucideIcons from "lucide-react";
 import { useAsyncStorage } from "../hooks/useAsyncStorage.js";
@@ -103,9 +103,11 @@ const slashOptions = [
   { id: 'divider', label: 'Divider', icon: LucideIcons.Minus, type: 'divider', format: 'p' }
 ];
 
-export default function JournalEntry({ theme, fontDisplay, fontBody, NeoSurface, folderId = null, onSaved, initialEntry = null }) {
+export default function JournalEntry({ theme, fontDisplay, fontBody, NeoSurface, folderId = null, onSaved, onCancel, initialEntry = null }) {
   const [mode, setMode] = useState(initialEntry ? initialEntry.mode : null); // 'free' or 'guided'
   const [activePrompt, setActivePrompt] = useState(initialEntry ? initialEntry.prompt : null);
+  const [title, setTitle] = useState(initialEntry?.title || "");
+  const [isDirty, setIsDirty] = useState(false);
 
   // Form states
   const [blocks, setBlocks] = useState(initialEntry && initialEntry.mode === 'free' && initialEntry.data.blocks ? initialEntry.data.blocks : [{ id: Date.now(), type: 'text', content: '', checked: false, format: 'p', indent: 0 }]);
@@ -179,15 +181,21 @@ export default function JournalEntry({ theme, fontDisplay, fontBody, NeoSurface,
     setEntryMood(null); setTags([]);
     setEntryFont('sans');
     setShowTypePicker(false);
+    setTitle("");
+    setIsDirty(false);
+    if (onCancel) onCancel();
   };
 
-  const saveAndClose = () => {
+  const saveEntry = useCallback((closeFormFlag = false) => {
+    if (!mode) return;
+    
     const entryData = {
       id: initialEntry ? initialEntry.id : Date.now(),
       date: initialEntry ? initialEntry.date : new Date().toISOString(),
       folderId: folderId,
       mode,
       prompt: activePrompt,
+      title,
       mood: entryMood,
       tags: tags,
       font: entryFont,
@@ -206,9 +214,30 @@ export default function JournalEntry({ theme, fontDisplay, fontBody, NeoSurface,
       entryData.data = { workBuilt, workBlockers, workDecisions };
     } else if (activePrompt === 'goal') {
       entryData.data = { goalWhich, goalProgress, goalWins, goalBlockers };
-    }    closeForm();
-    if (onSaved) onSaved(entryData);
-  };
+    }    
+    
+    if (closeFormFlag) {
+      closeForm();
+      if (onSaved) onSaved(entryData, false);
+    } else {
+      if (onSaved) onSaved(entryData, true);
+    }
+  }, [initialEntry, folderId, mode, activePrompt, title, entryMood, tags, entryFont, blocks, dayMood, dayBest, dayDrained, dayElse, grateful1, grateful2, grateful3, bookTitle, bookCh, bookQuote, bookThoughts, workBuilt, workBlockers, workDecisions, goalWhich, goalProgress, goalWins, goalBlockers, onSaved]);
+
+  useEffect(() => {
+    if (mode) {
+      setIsDirty(true);
+    }
+  }, [blocks, title, entryMood, tags, entryFont, dayMood, dayBest, dayDrained, dayElse, grateful1, grateful2, grateful3, bookTitle, bookCh, bookQuote, bookThoughts, workBuilt, workBlockers, workDecisions, goalWhich, goalProgress, goalWins, goalBlockers]);
+
+  useEffect(() => {
+    if (!isDirty) return;
+    const timer = setTimeout(() => {
+      saveEntry(false);
+      setIsDirty(false);
+    }, 1500);
+    return () => clearTimeout(timer);
+  }, [saveEntry, isDirty]);
 
   /* Toolbar Actions */
   const handleMic = () => {
@@ -711,7 +740,7 @@ export default function JournalEntry({ theme, fontDisplay, fontBody, NeoSurface,
               <div style={{ fontSize: 16, fontWeight: 600, color: theme.textPrimary, ...fontBody }}>
                 {mode === 'free' ? 'Free write' : PROMPTS.find(p => p.id === activePrompt)?.label}
               </div>
-              <button onClick={saveAndClose} style={{
+              <button onClick={() => saveEntry(true)} style={{
                 background: theme.bg, color: theme.accent, border: "none", boxShadow: theme.shadowRaisedSm,
                 borderRadius: 12, padding: "6px 14px", fontSize: 14, fontWeight: 600,
                 cursor: "pointer", ...fontBody
@@ -736,6 +765,18 @@ export default function JournalEntry({ theme, fontDisplay, fontBody, NeoSurface,
                 }
               }}
             >
+              {/* Title Input */}
+              <input
+                type="text"
+                placeholder="Note Title..."
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                style={{
+                  width: "100%", background: 'transparent', border: "none", outline: "none",
+                  color: theme.textPrimary, fontSize: 24, fontWeight: 700, ...fontDisplay,
+                  marginBottom: 16, padding: "0 4px"
+                }}
+              />
               
               {/* Tags Display */}
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 24 }}>

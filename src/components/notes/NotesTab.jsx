@@ -3,9 +3,50 @@ import * as LucideIcons from "lucide-react";
 import { useAsyncStorage } from "../../hooks/useAsyncStorage.js";
 import JournalEntry from "../JournalEntry.jsx";
 
+const NoteCard = ({ entry, showFolderBadge = true, theme, fontBody, folders, onEdit, onMove, getExcerpt }) => (
+  <div 
+    onClick={onEdit}
+    style={{
+      background: theme.bg, boxShadow: theme.shadowRaisedSm, borderRadius: 16, padding: 16, marginBottom: 12, cursor: 'pointer',
+      borderLeft: entry.mode === 'guided' ? `3px solid ${theme.accent}` : 'none'
+    }}
+  >
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
+      <div style={{ fontSize: 13, fontWeight: 600, color: theme.textSecondary, ...fontBody }}>
+        {new Date(entry.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+      </div>
+      <button 
+        onClick={(e) => { e.stopPropagation(); onMove(); }}
+        style={{ background: 'transparent', border: 'none', color: theme.textSecondary, cursor: 'pointer' }}
+      >
+        <LucideIcons.FolderSymlink size={16} />
+      </button>
+    </div>
+    {entry.title && (
+      <div style={{ fontSize: 16, fontWeight: 700, color: theme.textPrimary, ...fontBody, marginBottom: 8 }}>
+        {entry.title}
+      </div>
+    )}
+    <div style={{ fontSize: 15, color: theme.textPrimary, ...fontBody, lineHeight: 1.5, opacity: 0.9 }}>
+      {getExcerpt(entry)}
+    </div>
+    {showFolderBadge && entry.folderId && (
+      <div style={{ 
+        marginTop: 12, display: 'inline-flex', alignItems: 'center', gap: 4, 
+        background: theme.pageBg, padding: '4px 8px', borderRadius: 8, 
+        fontSize: 11, color: theme.textSecondary, ...fontBody 
+      }}>
+        <LucideIcons.Folder size={12} />
+        {folders.find(f => f.id === entry.folderId)?.name || 'Unknown'}
+      </div>
+    )}
+  </div>
+);
+
 export default function NotesTab({ theme, fontDisplay, fontBody, NeoSurface, NeoInput }) {
   const [folders, setFolders] = useAsyncStorage("neo_folders", []);
   const [entries, setEntries] = useAsyncStorage("neo_journal_entries", []);
+  const [searchQuery, setSearchQuery] = useState("");
 
   // 'folder-list' | 'editor'
   const [viewState, setViewState] = useState('folder-list');
@@ -30,17 +71,32 @@ export default function NotesTab({ theme, fontDisplay, fontBody, NeoSurface, Neo
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [folderToDelete, setFolderToDelete] = useState(null);
 
-  // Aggregation helper
-  const getFolderStats = (folderId) => {
-    const isTopLevel = folders.find(f => f.id === folderId)?.parentFolderId === null;
-    let subfolderIds = [];
-    if (isTopLevel) {
-      subfolderIds = folders.filter(f => f.parentFolderId === folderId).map(f => f.id);
-    }
-    const relevantFolderIds = [folderId, ...subfolderIds];
-    const notesCount = entries.filter(e => relevantFolderIds.includes(e.folderId)).length;
-    return { notesCount, subfoldersCount: subfolderIds.length };
-  };
+  // Aggregation helper precomputed for all folders
+  const folderStats = useMemo(() => {
+    const stats = {};
+    const folderMap = {};
+    folders.forEach(f => {
+      folderMap[f.id] = f;
+      stats[f.id] = { notesCount: 0, subfoldersCount: 0 };
+    });
+    
+    folders.forEach(f => {
+      if (f.parentFolderId && stats[f.parentFolderId]) {
+        stats[f.parentFolderId].subfoldersCount++;
+      }
+    });
+
+    entries.forEach(e => {
+      if (e.folderId && stats[e.folderId]) {
+        stats[e.folderId].notesCount++;
+        const parentId = folderMap[e.folderId]?.parentFolderId;
+        if (parentId && stats[parentId]) {
+          stats[parentId].notesCount++;
+        }
+      }
+    });
+    return stats;
+  }, [folders, entries]);
 
   const handleSaveFolder = () => {
     if (!newFolderName.trim()) return;
@@ -138,41 +194,6 @@ export default function NotesTab({ theme, fontDisplay, fontBody, NeoSurface, Neo
     marginBottom: 12
   };
 
-  const NoteCard = ({ entry, showFolderBadge = true }) => (
-    <div 
-      onClick={() => { setEditingEntry(entry); setCurrentFolderId(entry.folderId); setViewState('editor'); }}
-      style={{
-        background: theme.bg, boxShadow: theme.shadowRaisedSm, borderRadius: 16, padding: 16, marginBottom: 12, cursor: 'pointer',
-        borderLeft: entry.mode === 'guided' ? `3px solid ${theme.accent}` : 'none'
-      }}
-    >
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
-        <div style={{ fontSize: 13, fontWeight: 600, color: theme.textSecondary, ...fontBody }}>
-          {new Date(entry.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
-        </div>
-        <button 
-          onClick={(e) => { e.stopPropagation(); setNoteToMove(entry.id); setShowMoveNote(true); }}
-          style={{ background: 'transparent', border: 'none', color: theme.textSecondary, cursor: 'pointer' }}
-        >
-          <LucideIcons.FolderSymlink size={16} />
-        </button>
-      </div>
-      <div style={{ fontSize: 15, color: theme.textPrimary, ...fontBody, lineHeight: 1.5, opacity: 0.9 }}>
-        {getExcerpt(entry)}
-      </div>
-      {showFolderBadge && entry.folderId && (
-        <div style={{ 
-          marginTop: 12, display: 'inline-flex', alignItems: 'center', gap: 4, 
-          background: theme.pageBg, padding: '4px 8px', borderRadius: 8, 
-          fontSize: 11, color: theme.textSecondary, ...fontBody 
-        }}>
-          <LucideIcons.Folder size={12} />
-          {folders.find(f => f.id === entry.folderId)?.name || 'Unknown'}
-        </div>
-      )}
-    </div>
-  );
-
   // --- Screens ---
   let mainContent = null;
 
@@ -189,22 +210,31 @@ export default function NotesTab({ theme, fontDisplay, fontBody, NeoSurface, Neo
         </div>
         <div style={{ flex: 1, overflowY: 'auto' }}>
           <JournalEntry 
+            key={editingEntry?.id ?? 'new'}
             theme={theme} 
             fontDisplay={fontDisplay} 
             fontBody={fontBody} 
             NeoSurface={NeoSurface} 
             folderId={currentFolderId === 'all' ? null : currentFolderId}
             initialEntry={editingEntry}
-            onSaved={(entryData) => {
-              if (entryData) {
-                if (editingEntry) {
-                  setEntries(prev => prev.map(e => e.id === editingEntry.id ? entryData : e));
-                } else {
-                  setEntries(prev => [entryData, ...prev]);
-                }
-              }
+            onCancel={() => {
               setEditingEntry(null);
               setViewState('folder-list');
+            }}
+            onSaved={(entryData, isAutoSave = false) => {
+              setEntries(prev => {
+                const idx = prev.findIndex(e => e.id === entryData.id);
+                if (idx >= 0) {
+                  const newArr = [...prev];
+                  newArr[idx] = entryData;
+                  return newArr;
+                }
+                return [...prev, entryData];
+              });
+              if (!isAutoSave) {
+                setEditingEntry(null);
+                setViewState('folder-list');
+              }
             }}
           />
         </div>
@@ -215,6 +245,14 @@ export default function NotesTab({ theme, fontDisplay, fontBody, NeoSurface, Neo
     const topLevelFolders = folders.filter(f => f.parentFolderId === null);
     const allNotesExpanded = !!expandedFolders['all'];
     const uncategorizedExpanded = !!expandedFolders['uncategorized'];
+
+    // Search Filter
+    const searchResultNotes = searchQuery.trim() ? entries.filter(e => {
+      const q = searchQuery.toLowerCase();
+      const inTitle = e.title && e.title.toLowerCase().includes(q);
+      const inContent = e.mode === 'free' && e.data?.blocks?.some(b => b.content.toLowerCase().includes(q));
+      return inTitle || inContent;
+    }).sort((a,b) => new Date(b.date) - new Date(a.date)) : [];
 
     // Action Menu Helper
     const renderActionMenu = (folder) => {
@@ -249,19 +287,50 @@ export default function NotesTab({ theme, fontDisplay, fontBody, NeoSurface, Neo
     };
 
     mainContent = (
-      <div style={{ flex: 1, padding: '20px 16px', overflowY: 'auto', position: 'relative' }} onClick={() => setActiveActionMenuId(null)}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
-          <div style={{ fontSize: 24, fontWeight: 700, color: theme.textPrimary, ...fontDisplay }}>Notes</div>
+      <div style={{ flex: 1, padding: '20px 16px', overflowY: 'auto' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
+          <div style={{ fontSize: 28, fontWeight: 800, color: theme.textPrimary, ...fontDisplay }}>Notes</div>
           <button 
-            onClick={() => openCreateFolder(null)}
-            style={{ width: 40, height: 40, borderRadius: 20, background: theme.bg, boxShadow: theme.shadowRaisedSm, display: 'flex', alignItems: 'center', justifyContent: 'center', border: 'none', color: theme.accent, cursor: 'pointer' }}
-          >
-            <LucideIcons.FolderPlus size={20} />
+            onClick={() => setShowFolderModal(true)}
+            style={{ 
+              background: theme.bg, color: theme.accent, border: "none", boxShadow: theme.shadowRaisedSm,
+              borderRadius: 12, padding: "8px 16px", fontSize: 14, fontWeight: 700,
+              display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', ...fontBody 
+            }}>
+            <LucideIcons.FolderPlus size={16} /> New Folder
           </button>
         </div>
 
-        {/* All Notes */}
-        <div style={{ marginBottom: 16 }}>
+        {/* Search Bar */}
+        <div style={{ marginBottom: 24 }}>
+          <NeoInput 
+            placeholder="Search notes..." 
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            icon={<LucideIcons.Search size={18} />}
+          />
+        </div>
+
+        {searchQuery.trim() ? (
+          <div>
+            <div style={{ fontSize: 14, fontWeight: 600, color: theme.textSecondary, marginBottom: 16, ...fontBody }}>
+              Search Results ({searchResultNotes.length})
+            </div>
+            {searchResultNotes.map(entry => (
+              <NoteCard 
+                key={entry.id} 
+                entry={entry} 
+                theme={theme} fontBody={fontBody} folders={folders} 
+                onEdit={() => { setEditingEntry(entry); setCurrentFolderId(entry.folderId); setViewState('editor'); }}
+                onMove={() => { setNoteToMove(entry.id); setShowMoveNote(true); }}
+                getExcerpt={getExcerpt}
+              />
+            ))}
+          </div>
+        ) : (
+          <>
+            {/* All Notes Folder */}
+            <div style={{ marginBottom: 16 }}>
           <div style={{ ...folderCardStyle, marginBottom: 0 }} onClick={() => setExpandedFolders(prev => ({ ...prev, all: !prev.all }))}>
              <div style={{ width: 40, height: 40, borderRadius: 12, background: theme.bg, boxShadow: theme.shadowRaisedSm, display: 'flex', alignItems: 'center', justifyContent: 'center', color: theme.textSecondary }}>
                <LucideIcons.Files size={20} />
@@ -276,17 +345,26 @@ export default function NotesTab({ theme, fontDisplay, fontBody, NeoSurface, Neo
           </div>
           {allNotesExpanded && (
             <div style={{ paddingLeft: 32, marginTop: 12, display: 'flex', flexDirection: 'column' }}>
-              {entries.sort((a,b) => new Date(b.date) - new Date(a.date)).map(entry => <NoteCard key={entry.id} entry={entry} showFolderBadge={true} />)}
+              {[...entries].sort((a,b) => new Date(b.date) - new Date(a.date)).map(entry => (
+                <NoteCard 
+                  key={entry.id} 
+                  entry={entry} 
+                  theme={theme} fontBody={fontBody} folders={folders} 
+                  onEdit={() => { setEditingEntry(entry); setCurrentFolderId(entry.folderId); setViewState('editor'); }}
+                  onMove={() => { setNoteToMove(entry.id); setShowMoveNote(true); }}
+                  getExcerpt={getExcerpt}
+                />
+              ))}
             </div>
           )}
         </div>
 
         {/* Top Level Folders */}
         {topLevelFolders.map(folder => {
-          const stats = getFolderStats(folder.id);
+          const stats = folderStats[folder.id] || { notesCount: 0, subfoldersCount: 0 };
           const isExpanded = !!expandedFolders[folder.id];
-          const subfolders = folders.filter(f => f.parentFolderId === folder.id).sort((a,b) => a.name.localeCompare(b.name));
-          const folderEntries = entries.filter(e => e.folderId === folder.id).sort((a,b) => new Date(b.date) - new Date(a.date));
+          const subfolders = [...folders].filter(f => f.parentFolderId === folder.id).sort((a,b) => a.name.localeCompare(b.name));
+          const folderEntries = [...entries].filter(e => e.folderId === folder.id).sort((a,b) => new Date(b.date) - new Date(a.date));
 
           return (
             <div key={folder.id} style={{ marginBottom: 16 }}>
@@ -323,9 +401,9 @@ export default function NotesTab({ theme, fontDisplay, fontBody, NeoSurface, Neo
                   </div>
 
                   {subfolders.map(sub => {
-                    const subStats = getFolderStats(sub.id);
+                    const subStats = folderStats[sub.id] || { notesCount: 0, subfoldersCount: 0 };
                     const subExpanded = !!expandedFolders[sub.id];
-                    const subEntries = entries.filter(e => e.folderId === sub.id).sort((a,b) => new Date(b.date) - new Date(a.date));
+                    const subEntries = [...entries].filter(e => e.folderId === sub.id).sort((a,b) => new Date(b.date) - new Date(a.date));
                     
                     return (
                       <div key={sub.id} style={{ marginBottom: 12 }}>
@@ -355,14 +433,34 @@ export default function NotesTab({ theme, fontDisplay, fontBody, NeoSurface, Neo
                               <LucideIcons.PlusCircle size={16} />
                               <span style={{ fontSize: 13, fontWeight: 600, ...fontBody }}>Create Note Here</span>
                             </div>
-                            {subEntries.map(entry => <NoteCard key={entry.id} entry={entry} showFolderBadge={false} />)}
+                             {subEntries.map(entry => (
+                                <NoteCard 
+                                  key={entry.id} 
+                                  entry={entry} 
+                                  showFolderBadge={false} 
+                                  theme={theme} fontBody={fontBody} folders={folders} 
+                                  onEdit={() => { setEditingEntry(entry); setCurrentFolderId(entry.folderId); setViewState('editor'); }}
+                                  onMove={() => { setNoteToMove(entry.id); setShowMoveNote(true); }}
+                                  getExcerpt={getExcerpt}
+                                />
+                             ))}
                           </div>
                         )}
                       </div>
                     );
                   })}
                   
-                  {folderEntries.map(entry => <NoteCard key={entry.id} entry={entry} showFolderBadge={false} />)}
+                  {folderEntries.map(entry => (
+                    <NoteCard 
+                      key={entry.id} 
+                      entry={entry} 
+                      showFolderBadge={false} 
+                      theme={theme} fontBody={fontBody} folders={folders} 
+                      onEdit={() => { setEditingEntry(entry); setCurrentFolderId(entry.folderId); setViewState('editor'); }}
+                      onMove={() => { setNoteToMove(entry.id); setShowMoveNote(true); }}
+                      getExcerpt={getExcerpt}
+                    />
+                  ))}
                 </div>
               )}
             </div>
@@ -387,7 +485,17 @@ export default function NotesTab({ theme, fontDisplay, fontBody, NeoSurface, Neo
           </div>
           {uncategorizedExpanded && (
             <div style={{ paddingLeft: 32, marginTop: 12, display: 'flex', flexDirection: 'column' }}>
-              {entries.filter(e => !e.folderId).sort((a,b) => new Date(b.date) - new Date(a.date)).map(entry => <NoteCard key={entry.id} entry={entry} showFolderBadge={false} />)}
+              {[...entries].filter(e => !e.folderId).sort((a,b) => new Date(b.date) - new Date(a.date)).map(entry => (
+                <NoteCard 
+                  key={entry.id} 
+                  entry={entry} 
+                  showFolderBadge={false}
+                  theme={theme} fontBody={fontBody} folders={folders} 
+                  onEdit={() => { setEditingEntry(entry); setCurrentFolderId(entry.folderId); setViewState('editor'); }}
+                  onMove={() => { setNoteToMove(entry.id); setShowMoveNote(true); }}
+                  getExcerpt={getExcerpt}
+                />
+              ))}
             </div>
           )}
         </div>
@@ -403,6 +511,8 @@ export default function NotesTab({ theme, fontDisplay, fontBody, NeoSurface, Neo
           <LucideIcons.PenLine size={24} />
         </button>
 
+          </>
+        )}
       </div>
     );
   }

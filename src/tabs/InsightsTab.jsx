@@ -1,41 +1,22 @@
-import re
+import React, { useState, useRef, useEffect, useMemo, Suspense } from 'react';
+import * as LucideIcons from 'lucide-react';
+import { getLocalDateString, getLocalToday, getLocalTime } from '../utils/date.js';
+import { formatCurrency } from '../utils/currency.js';
+import { EXPENSE_CATEGORIES, INCOME_CATEGORIES } from '../utils/categories.js';
+import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, AreaChart, Area, XAxis, YAxis, CartesianGrid, BarChart, Bar } from 'recharts';
+import { GoogleGenAI } from "@google/genai";
 
-with open("src/App.jsx", "r") as f:
-    content = f.read()
 
-# 1. Add GoogleGenAI import
-content = content.replace('import React, { useState, useEffect, useRef } from "react";', 'import React, { useState, useEffect, useRef } from "react";\nimport { GoogleGenAI } from "@google/genai";')
+export default function InsightsTab(props) {
+  const {
+    show, setShow, copyMsg, setCopyMsg, activeTab, setActiveTab, swipeToast, setSwipeToast, swipeToastKey, setSwipeToastKey, swipeToastTimer, navBarRef, hasSeenNavHint, setHasSeenNavHint, history, setHistory, historyLoading, dailyGoalMinutes, setDailyGoalMinutes, hours, setHours, showCustomTimer, setShowCustomTimer, minutes, setMinutes, seconds, setSeconds, name, setName, isRunning, setIsRunning, remaining, setRemaining, activeSource, setActiveSource, audioUrl, setAudioUrl, youtubeId, setYoutubeId, isPlaying, setIsPlaying, volume, setVolume, isMuted, setIsMuted, activeCategoryPie, setActiveCategoryPie, fileInputRef, audioRef, audioCtxRef, oscillatorIntervalRef, alarmTimeoutRef, ytPlayerRef, ytLink, setYtLink, svgRef, mode, setMode, pomoPhase, setPomoPhase, pomoCycle, setPomoCycle, pomoFocusDuration, setPomoFocusDuration, pomoBreakDuration, setPomoBreakDuration, pomoMaxCycles, setPomoMaxCycles, transactions, setTransactions, transactionsLoading, linkedTodo, setLinkedTodo, showTodoPicker, setShowTodoPicker, showNoteModal, setShowNoteModal, sessionNote, setSessionNote, currentSessionId, setCurrentSessionId, migrationDoneRef, customCategories, setCustomCategories, customCategoryIcons, setCustomCategoryIcons, customIncomeCategories, setCustomIncomeCategories, todos, incrementPomodoro, toggleDone, updateTodo, categoryBudgets, setCategoryBudgets, upcomingBills, setUpcomingBills, billsLoading, showDailyGoalModal, setShowDailyGoalModal, tempDailyGoal, setTempDailyGoal, banks, setBanks, banksLoading, showBanksList, setShowBanksList, showBankForm, setShowBankForm, editingBankId, setEditingBankId, showCategoryForm, setShowCategoryForm, showManageCategories, setShowManageCategories, showCalendarWidget, setShowCalendarWidget, newCategoryName, setNewCategoryName, newCategoryIcon, setNewCategoryIcon, newCategoryType, setNewCategoryType, bankFormState, setBankFormState, showForm, setShowForm, showEditBalanceModal, setShowEditBalanceModal, editingBalanceAcc, setEditingBalanceAcc, tempBalance, setTempBalance, showBillModal, setShowBillModal, editingBill, setEditingBill, billFormState, setBillFormState, monthOffset, setMonthOffset, selectedDate, setSelectedDate, filterType, setFilterType, filterBank, setFilterBank, filterStartDate, setFilterStartDate, filterEndDate, setFilterEndDate, filterCategory, setFilterCategory, visibleTxCount, setVisibleTxCount, bankTxFilterType, setBankTxFilterType, bankTxFilterCategory, setBankTxFilterCategory, newAmount, setNewAmount, newDesc, setNewDesc, newCurrency, setNewCurrency, newExchangeRate, setNewExchangeRate, newCat, setNewCat, newType, setNewType, newDate, setNewDate, newTime, setNewTime, showCategoryDrawer, setShowCategoryDrawer, newMethod, setNewMethod, editingTxId, setEditingTxId, activeAccount, setActiveAccount, showBudgetModal, setShowBudgetModal, showBudgetDropdown, setShowBudgetDropdown, activeReminders, setActiveReminders, showBreathing, setShowBreathing, activeTechnique, setActiveTechnique, showReflectionHistory, setShowReflectionHistory, dailyIntention, setDailyIntention, dailyMood, setDailyMood, eveningReflection, setEveningReflection, dailyGratitude, setDailyGratitude, meditationDuration, setMeditationDuration, meditationTimeLeft, setMeditationTimeLeft, isMeditating, setIsMeditating, darkMode, setDarkMode, baseCurrency, setBaseCurrency, query, setQuery, loading, setLoading, insight, setInsight, askInput, setAskInput, askAnswer, setAskAnswer, asking, setAsking, generating, setGenerating, generatedInsight, setGeneratedInsight, apiKey, setApiKey, direction, setDirection, showInsights, setShowInsights, expenseView, setExpenseView, walletCardIndex, setWalletCardIndex, showRuleModal, setShowRuleModal, showWipeConfirm, setShowWipeConfirm, customCategoryRules, setCustomCategoryRules, importReviews, setImportReviews, updateBankBalance, setUpdateBankBalance, editableBankName, setEditableBankName, isImporting, setIsImporting, importErrorMsg, setImportErrorMsg, duplicateWarning, setDuplicateWarning, showImportConsent, setShowImportConsent, pendingImportFiles, setPendingImportFiles, showImportCelebration, setShowImportCelebration, importedCount, setImportedCount, lastImportSnapshot, setLastImportSnapshot, importSnapshotLoading, touchData, isOpen, setIsOpen, open, setOpen, containerRef, viewDate, setViewDate,
+    theme, fontDisplay, fontBody, NeoSurface, NeoInput, PrimaryButton, IconBtn, SectionLabel, NeoSelect, CollapsibleSection, ALL_EXPENSE_CATEGORIES, ALL_INCOME_CATEGORIES, getDailyAvgSpend, markDayActive, updateBalanceForMethod, BankBadge, CATEGORY_KEYWORD_MAP, TX_CATEGORY_ICONS, ICON_OPTIONS, BANK_ICONS, handleFileUpload, handleImportStatement, PRESET_BANKS,
+    NeoDatePicker, TimePicker, playAlarm, stopAlarm, initAudioCtx, autoTimerName, resetTimer, extractYoutubeId, handlePlayPause,
+    methodLabel, dailyAvgSpend, currentMonthTx, spentThisMonth, incomeThisMonth, netSavings, monthlyBurnRate, spentByCategory, pieData, categoryPieData, txByDay, dayFiltered, targetYearStr, targetMonthStr, monthLabel, daysInMonth, BUDGETS
+  } = props;
+  
+  const { Play, Pause, Square, Music, Volume2, VolumeX, List, Check, X, Target, BarChart2, CheckCircle2, ChevronRight, Settings2, Clock, Upload, XCircle, LayoutDashboard, Settings, Edit, Bell, ListChecks, Flame, Plus, Trash2, Edit2, Search, ChevronDown, Download, Eye, Tag, RefreshCw, DollarSign, Filter, ShoppingCart, Smartphone, Landmark, Calendar, AlertTriangle, ArrowRight, ChevronLeft, Flower2, PiggyBank, Box, MonitorPlay, TimerIcon, Wallet, User, Notebook, Home, Building2, TrendingDown, TrendingUp, RotateCcw, StopCircle, PlayCircle, PauseCircle, Sparkles, Send, MessageSquare } = LucideIcons;
 
-# 2. Hoist states to NeoApp
-neoapp_start = content.find("export default function NeoApp() {\n")
-neoapp_body_start = neoapp_start + len("export default function NeoApp() {\n")
-
-hoisted_states = """
-  // Hoisted state
-  const [history, setHistory] = useState([]);
-  const [transactions, setTransactions] = useState([]);
-  const [todos, setTodos] = useState([]);
-"""
-content = content[:neoapp_body_start] + hoisted_states + content[neoapp_body_start:]
-
-# Remove old state declarations
-content = re.sub(r'const \[history, setHistory\] = useState\(\[.*?\]\);\n', '', content, flags=re.DOTALL)
-content = re.sub(r'const \[transactions, setTransactions\] = useState\(\[.*?\]\);\n', '', content, flags=re.DOTALL)
-content = re.sub(r'const \[todos, setTodos\] = useState\(\[.*?\]\);\n', '', content, flags=re.DOTALL)
-
-# 3. Rewrite InsightsTab
-insights_start = content.find("function InsightsTab() {")
-insights_end = content.find("/* ---------------------------------- GLOBAL SEARCH ---------------------------------- */")
-
-insights_tab_code = content[insights_start:insights_end]
-old_insights_tab_code = insights_tab_code
-
-new_insights_tab_code = """function InsightsTab() {
-    const [askInput, setAskInput] = useState("");
-    const [askAnswer, setAskAnswer] = useState(null);
-    const [asking, setAsking] = useState(false);
-    const [generatedInsight, setGeneratedInsight] = useState("Click 'Generate another insight' to get AI-powered analysis of your real data.");
-    const [generating, setGenerating] = useState(false);
 
     const askAI = async () => {
       if (!askInput.trim()) return;
@@ -47,8 +28,12 @@ new_insights_tab_code = """function InsightsTab() {
       try {
         const ai = new GoogleGenAI({ apiKey });
         const dataContext = { transactions, todos, history };
-        const prompt = `Here is my data: ${JSON.stringify(dataContext)}\n\nQuestion: ${askInput}\n\nAnswer concisely based on the data.`;
-        const response = await ai.models.generateContent({ model: 'gemini-2.0-flash', contents: prompt });
+        const prompt = `Here is my data: ${JSON.stringify(dataContext)}
+
+Question: ${askInput}
+
+Answer concisely based on the data.`;
+        const response = await ai.models.generateContent({ model: 'gemini-2.5-flash', contents: prompt });
         setAskAnswer(response.text);
       } catch (err) {
         setAskAnswer("Error: " + err.message);
@@ -66,8 +51,10 @@ new_insights_tab_code = """function InsightsTab() {
       try {
         const ai = new GoogleGenAI({ apiKey });
         const dataContext = { transactions, todos, history };
-        const prompt = `Here is my data: ${JSON.stringify(dataContext)}\n\nGenerate one short, helpful insight about my productivity or finances based ONLY on this data. Max 2 sentences. If there's no data, encourage the user to add some.`;
-        const response = await ai.models.generateContent({ model: 'gemini-2.0-flash', contents: prompt });
+        const prompt = `Here is my data: ${JSON.stringify(dataContext)}
+
+Generate one short, helpful insight about my productivity or finances based ONLY on this data. Max 2 sentences. If there's no data, encourage the user to add some.`;
+        const response = await ai.models.generateContent({ model: 'gemini-2.5-flash', contents: prompt });
         setGeneratedInsight(response.text);
       } catch (err) {
         setGeneratedInsight("Error: " + err.message);
@@ -79,7 +66,7 @@ new_insights_tab_code = """function InsightsTab() {
     // Derived stats from real data
     const expenseTotal = transactions.filter(t => t.type === 'expense').reduce((a, b) => a + b.amount, 0);
     const incomeTotal = transactions.filter(t => t.type === 'income').reduce((a, b) => a + b.amount, 0);
-    
+
     // Category Data
     const catMap = {};
     transactions.filter(t => t.type === 'expense').forEach(t => { catMap[t.category] = (catMap[t.category] || 0) + t.amount; });
@@ -97,7 +84,7 @@ new_insights_tab_code = """function InsightsTab() {
     // We will just aggregate all history minutes since we don't have full date parsing
     const totalFocus = history.reduce((a, b) => a + b.minutes, 0);
     const weekly = [{ day: "Total", mins: totalFocus }];
-    
+
     // Monthly income vs expense
     const monthly = [{ m: "Total", income: incomeTotal, expense: expenseTotal }];
 
@@ -107,7 +94,7 @@ new_insights_tab_code = """function InsightsTab() {
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
             <Sparkles size={16} color={theme.accent} />
             <span style={{ color: theme.textPrimary, fontWeight: 700, fontSize: 13.5, ...fontDisplay }}>AI insight</span>
-            <span style={{ color: theme.textSecondary, fontSize: 10.5, marginLeft: "auto", ...fontBody }}>Gemini 2.0 Flash</span>
+            <span style={{ color: theme.textSecondary, fontSize: 10.5, marginLeft: "auto", ...fontBody }}>Gemini 2.5 Flash</span>
           </div>
           <div style={{ color: theme.textPrimary, fontSize: 13, lineHeight: 1.5, ...fontBody }}>
             {generating ? "Thinking..." : generatedInsight}
@@ -192,10 +179,5 @@ new_insights_tab_code = """function InsightsTab() {
       </div>
     );
   }
-  """
 
-content = content.replace(old_insights_tab_code, new_insights_tab_code)
-
-with open("src/App.jsx", "w") as f:
-    f.write(content)
-
+  

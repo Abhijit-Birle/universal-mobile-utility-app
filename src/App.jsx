@@ -120,6 +120,8 @@ import NeoSelect from "./components/ui/NeoSelect.jsx";
 import WheelPicker from "./components/ui/WheelPicker.jsx";
 import { useTodos } from "./hooks/useTodos.js";
 import { useAsyncStorage } from "./hooks/useAsyncStorage.js";
+import JournalEntry from "./components/JournalEntry.jsx";
+import NotesTab from "./components/notes/NotesTab.jsx";
 import { useLocalStorage } from "./hooks/useLocalStorage.js";
 import { useStreak } from "./hooks/useStreak.js";
 import { useZenStreak } from "./hooks/useZenStreak.js";
@@ -308,7 +310,7 @@ function Numpad({ value, onChange, theme, NeoSurface }) {
 
 /* ---------------------------------- root ---------------------------------- */
 
-const TAB_ORDER = ["summary", "timer", "meditation", "expense", "todo", "profile"];
+const TAB_ORDER = ["summary", "expense", "notes", "meditation", "timer", "todo", "profile"];
 
 
 
@@ -353,6 +355,9 @@ const MaskedField = ({ label, value, theme, fontBody, isSensitive = false }) => 
 export default function NeoApp() {
 
   const [activeTab, setActiveTab] = useState("summary");
+  const [swipeToast, setSwipeToast] = useState(null);
+  const [swipeToastKey, setSwipeToastKey] = useState(0);
+  const swipeToastTimer = useRef(null);
   const navBarRef = useRef(null);
   const [hasSeenNavHint, setHasSeenNavHint] = useLocalStorage("neoapp_nav_hint", false);
   const [history, setHistory, historyLoading] = useAsyncStorage("neo_history", []);
@@ -954,9 +959,19 @@ export default function NeoApp() {
     setDirection(newIdx > oldIdx ? 1 : -1);
     setActiveTab(newTab);
     try { Haptics.impact({ style: ImpactStyle.Light }); } catch(e) {}
+    
+    // Show tab name when switching
+    const tabData = TABS.find(t => t.id === newTab);
+    if (tabData) {
+      setSwipeToast(tabData.label);
+      setSwipeToastKey(k => k + 1);
+      if (swipeToastTimer.current) clearTimeout(swipeToastTimer.current);
+      swipeToastTimer.current = setTimeout(() => setSwipeToast(null), 1200);
+    }
   };
 
   const onSwipeStart = (e) => {
+    if (activeTechnique) return;
     const p = e.touches ? e.touches[0] : e;
     touchData.current = { x: p.clientX, y: p.clientY, active: true };
   };
@@ -1013,8 +1028,8 @@ export default function NeoApp() {
     border: darkMode ? "#323848" : "#ffffff",
   }), [darkMode]);
 
-  const fontDisplay = { fontFamily: "'Poppins', sans-serif" };
-  const fontBody = { fontFamily: "'Inter', sans-serif" };
+  const fontDisplay = { fontFamily: "'Outfit', sans-serif", letterSpacing: '-0.02em' };
+  const fontBody = { fontFamily: "'Plus Jakarta Sans', sans-serif", letterSpacing: '-0.01em' };
 
   /* ---------- shared neomorphic primitives ---------- */
 
@@ -1454,24 +1469,6 @@ export default function NeoApp() {
 
     return (
       <div style={{ padding: "18px 18px 100px" }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", position: "relative", marginBottom: 14 }}>
-          <div style={{ display: "flex", gap: 4, background: theme.bg, boxShadow: theme.shadowPressed, borderRadius: 14, padding: 4 }}>
-            {["focus", "pomodoro"].map((m) => (
-              <button key={m} onClick={() => { setMode(m); setIsRunning(false); if (m === "pomodoro") { setPomoPhase("Focus"); setPomoCycle(1); setHours(0); setMinutes(pomoFocusDuration); setSeconds(0); } }} style={{
-                border: "none", padding: "7px 12px", borderRadius: 10, fontSize: 11.5, fontWeight: 600, ...fontBody,
-                background: mode === m ? `linear-gradient(135deg, ${theme.accent}, #5a4fcf)` : "transparent",
-                color: mode === m ? "#fff" : theme.textSecondary,
-              }}>{m === "focus" ? "Focus" : "Pomodoro"}</button>
-            ))}
-          </div>
-          {mode === "pomodoro" && (
-            <div style={{ position: "absolute", right: 0, display: "flex", alignItems: "center", gap: 5, color: "#ff9f43", fontSize: 12, fontWeight: 700, ...fontDisplay }}>
-              <Flame size={15} /> {streak} streak
-            </div>
-          )}
-        </div>
-
-
 
         <NeoSurface style={{ padding: "32px", display: "flex", flexDirection: "column", alignItems: "center", position: "relative", overflow: "hidden", maxWidth: 460, margin: "0 auto" }}>
 
@@ -1959,6 +1956,23 @@ export default function NeoApp() {
           </div>
         </NeoSurface>
 
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", position: "relative", marginTop: 24 }}>
+          <div style={{ display: "flex", gap: 4, background: theme.bg, boxShadow: theme.shadowPressed, borderRadius: 14, padding: 4 }}>
+            {["focus", "pomodoro"].map((m) => (
+              <button key={m} onClick={() => { setMode(m); setIsRunning(false); if (m === "pomodoro") { setPomoPhase("Focus"); setPomoCycle(1); setHours(0); setMinutes(pomoFocusDuration); setSeconds(0); } }} style={{
+                border: "none", padding: "7px 12px", borderRadius: 10, fontSize: 11.5, fontWeight: 600, ...fontBody,
+                background: mode === m ? `linear-gradient(135deg, ${theme.accent}, #5a4fcf)` : "transparent",
+                color: mode === m ? "#fff" : theme.textSecondary,
+              }}>{m === "focus" ? "Focus" : "Pomodoro"}</button>
+            ))}
+          </div>
+          {mode === "pomodoro" && (
+            <div style={{ position: "absolute", right: 0, display: "flex", alignItems: "center", gap: 5, color: "#ff9f43", fontSize: 12, fontWeight: 700, ...fontDisplay }}>
+              <Flame size={15} /> {streak} streak
+            </div>
+          )}
+        </div>
+
         <div style={{ marginTop: 22 }}>
           <SectionLabel>Daily focus goal</SectionLabel>
           <NeoSurface style={{ padding: 16, display: "flex", alignItems: "center", gap: 14 }}>
@@ -2101,87 +2115,7 @@ export default function NeoApp() {
           </div>
         </div>
         
-        {/* Mood Check-in */}
-        <NeoSurface style={{ borderRadius: 20, padding: "20px", display: 'flex', flexDirection: 'column', gap: 12 }}>
-          <div style={{ fontSize: 13, color: theme.textSecondary, fontWeight: 600, ...fontBody, textTransform: "uppercase", letterSpacing: "0.05em" }}>How are you feeling?</div>
-          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-            {[1, 2, 3, 4, 5].map(m => {
-              const MOOD_EMOJIS = {1: '😞', 2: '😕', 3: '😐', 4: '🙂', 5: '😄'};
-              const isSel = dailyMood === m;
-              return (
-                <button
-                  key={m}
-                  onClick={() => saveMood(m)}
-                  style={{
-                    background: isSel ? theme.bg : 'transparent',
-                    boxShadow: isSel ? theme.shadowInset : 'none',
-                    border: 'none', borderRadius: 12, padding: 8, fontSize: 24,
-                    cursor: 'pointer', transition: 'all 0.2s',
-                    opacity: isSel || !dailyMood ? 1 : 0.4
-                  }}
-                >
-                  {MOOD_EMOJIS[m]}
-                </button>
-              )
-            })}
-          </div>
-        </NeoSurface>
-
-        {/* Daily Intention */}
-        <NeoSurface style={{ borderRadius: 20, padding: "20px" }}>
-          <div style={{ fontSize: 13, color: theme.textSecondary, marginBottom: 12, fontWeight: 600, ...fontBody, textTransform: "uppercase", letterSpacing: "0.05em" }}>Morning Intention</div>
-          <input
-            type="text"
-            value={dailyIntention}
-            onChange={(e) => saveDailyIntention(e.target.value)}
-            placeholder="What is your intention for today?"
-            style={{
-              width: "100%", background: "transparent", border: "none", outline: "none",
-              color: theme.textPrimary, fontSize: 16, ...fontDisplay,
-              borderBottom: `1px solid ${theme.border || 'transparent'}`, paddingBottom: 8
-            }}
-          />
-        </NeoSurface>
-        
-        {/* Evening Reflection (Time-gated) */}
-        {isEvening && (
-          <NeoSurface style={{ borderRadius: 20, padding: "20px" }}>
-            <div style={{ fontSize: 13, color: theme.textSecondary, marginBottom: 12, fontWeight: 600, ...fontBody, textTransform: "uppercase", letterSpacing: "0.05em" }}>Evening Reflection</div>
-            <textarea
-              value={eveningReflection}
-              onChange={(e) => saveEveningReflection(e.target.value)}
-              placeholder="How did today go? What went well?"
-              style={{
-                width: "100%", background: "transparent", border: "none", outline: "none",
-                color: theme.textPrimary, fontSize: 15, ...fontBody,
-                minHeight: 60, resize: 'none'
-              }}
-            />
-          </NeoSurface>
-        )}
-
-        {/* Gratitude Log */}
-        <NeoSurface style={{ borderRadius: 20, padding: "20px" }}>
-          <div style={{ fontSize: 13, color: theme.textSecondary, marginBottom: 12, fontWeight: 600, ...fontBody, textTransform: "uppercase", letterSpacing: "0.05em" }}>3 Things I'm Grateful For</div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            {[0, 1, 2].map(i => (
-              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span style={{ color: theme.accent, fontWeight: 700, fontSize: 14 }}>{i + 1}.</span>
-                <input
-                  type="text"
-                  value={dailyGratitude[i]}
-                  onChange={(e) => saveGratitude(i, e.target.value)}
-                  placeholder="I am grateful for..."
-                  style={{
-                    flex: 1, background: "transparent", border: "none", outline: "none",
-                    color: theme.textPrimary, fontSize: 14, ...fontBody,
-                    borderBottom: `1px solid ${theme.border || 'transparent'}`, paddingBottom: 4
-                  }}
-                />
-              </div>
-            ))}
-          </div>
-        </NeoSurface>
+        {/* Removed JournalEntry from here since it now has its own tab */}
 
         {/* History Link */}
         <div style={{ display: 'flex', justifyContent: 'center' }}>
@@ -4659,9 +4593,10 @@ Generate one short, helpful insight about my productivity or finances based ONLY
 
   const TABS = [
     { id: "summary", label: "Home", icon: LayoutDashboard },
-    { id: "timer", label: "Timer", icon: TimerIcon },
-    { id: "meditation", label: "Zen", icon: Flower2 },
     { id: "expense", label: "Expense", icon: Wallet },
+    { id: "notes", label: "Notes", icon: LucideIcons.Notebook },
+    { id: "meditation", label: "Zen", icon: Flower2 },
+    { id: "timer", label: "Timer", icon: TimerIcon },
     { id: "todo", label: "Todo", icon: ListChecks },
     { id: "profile", label: "Profile", icon: User },
   ];
@@ -4724,8 +4659,23 @@ Generate one short, helpful insight about my productivity or finances based ONLY
         @keyframes slideInLeft { from { transform: translateX(-28px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
         @keyframes eqBounce { 0%, 100% { transform: scaleY(0.4); } 50% { transform: scaleY(1); } }
         @keyframes progressGlide { 0% { width: 0%; left: 0%; } 50% { width: 100%; left: 0%; } 100% { width: 0%; left: 100%; } }
+        @keyframes fadeInOut { 0% { opacity: 0; transform: translate(-50%, -5px); } 15% { opacity: 1; transform: translate(-50%, 0); } 85% { opacity: 1; transform: translate(-50%, 0); } 100% { opacity: 0; transform: translate(-50%, -5px); } }
       `}</style>
       <div style={{ width: "100%", minHeight: "100vh", background: theme.pageBg, display: "flex", flexDirection: "column", overflow: "hidden", position: "relative" }}>
+        
+        {swipeToast && (
+          <div key={swipeToastKey} style={{
+            position: "absolute", top: 72, left: "50%", transform: "translateX(-50%)", zIndex: 100,
+            background: theme.bg, 
+            color: theme.textPrimary, padding: "4px 12px", borderRadius: 12,
+            fontSize: 11, fontWeight: 700, ...fontBody, letterSpacing: 0.5,
+            boxShadow: theme.shadowRaisedSm,
+            pointerEvents: "none",
+            animation: "fadeInOut 1.2s ease forwards",
+          }}>
+            {swipeToast}
+          </div>
+        )}
 
         {/* top pill tab bar */}
         <div 
@@ -4755,30 +4705,10 @@ Generate one short, helpful insight about my productivity or finances based ONLY
                     transition: "background .2s, color .2s",
                   }}
                 >
-                  <Icon size={16} />
-                  <span style={{ fontSize: 10.5, fontWeight: 600, ...fontBody }}>{t.label}</span>
+                  <Icon size={20} />
                 </button>
               );
             })}
-          </div>
-          <div 
-            style={{ 
-              position: "absolute", top: 62, left: "50%", transform: "translateX(-50%)",
-              width: "calc(100% - 36px)", maxWidth: 500,
-              display: "flex", justifyContent: "center", alignItems: "center", gap: 5, 
-              minHeight: 32, cursor: "pointer",
-            }}
-          >
-            {TAB_ORDER.map((id) => (
-              <div key={id} 
-                onClick={(e) => { e.stopPropagation(); switchTab(id); if (!hasSeenNavHint) setHasSeenNavHint(true); }}
-                style={{
-                  width: id === activeTab ? 14 : 5, height: 5, borderRadius: 3,
-                  background: id === activeTab ? theme.accent : (darkMode ? "#3a4051" : "#c9cfda"),
-                  transition: "width .2s",
-                }}
-              />
-            ))}
           </div>
         </div>
 
@@ -4794,11 +4724,12 @@ Generate one short, helpful insight about my productivity or finances based ONLY
         >
           <div key={activeTab} style={{ animation: `${direction > 0 ? "slideInRight" : "slideInLeft"} 0.25s ease`, flex: "1 0 auto", display: "flex", flexDirection: "column" }}>
             {activeTab === "summary" && <SummaryTab theme={theme} NeoSurface={NeoSurface} NeoInput={NeoInput} fontDisplay={fontDisplay} fontBody={fontBody} onNavigate={switchTab} transactions={transactions} streak={streak} activeDays={activeDays} monthlyActiveCount={monthlyActiveCount} daysInMonth={streakDaysInMonth} yearlyActiveCount={yearlyActiveCount} daysInYear={daysInYear} onShowForm={() => { switchTab('expense'); setShowForm(true); }} isImporting={isImporting} onImportStatement={handleImportStatement} totalBudget={Object.values(categoryBudgets).reduce((sum, b) => sum + (Number(b) || 0), 0)} focusTimer={focusTimerAdapter} />}
-            {activeTab === "timer" && renderTimerTab()}
-            {activeTab === "meditation" && renderMeditationTab()}
             {activeTab === "expense" && renderExpenseTab()}
-            {activeTab === "profile" && <ProfileTab />}
+            {activeTab === "notes" && <NotesTab theme={theme} fontDisplay={fontDisplay} fontBody={fontBody} NeoSurface={NeoSurface} NeoInput={NeoInput} />}
+            {activeTab === "meditation" && renderMeditationTab()}
+            {activeTab === "timer" && renderTimerTab()}
             {activeTab === "todo" && <TodoTab theme={theme} NeoSurface={NeoSurface} NeoInput={NeoInput} PrimaryButton={PrimaryButton} SectionLabel={SectionLabel} fontDisplay={fontDisplay} fontBody={fontBody} />}
+            {activeTab === "profile" && <ProfileTab />}
           </div>
         </div>
         <audio ref={audioRef} style={{ display: 'none' }} />

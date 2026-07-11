@@ -102,11 +102,17 @@ export default function BreathingScreen({ onClose, activeSource, musicOptions = 
     : '0.6s';
 
   return (
-    <div style={{
-      position: 'fixed', inset: 0, zIndex: 1000,
-      background: colors.bg,
-      overflow: 'hidden',
-      transition: 'background 1.2s ease',
+    <div 
+      onTouchStart={(e) => e.stopPropagation()}
+      onTouchMove={(e) => e.stopPropagation()}
+      onTouchEnd={(e) => e.stopPropagation()}
+      style={{
+        position: 'fixed', inset: 0, zIndex: 1000,
+        background: colors.bg,
+        overflow: 'hidden',
+        transition: 'background 1.2s ease',
+        touchAction: 'none',
+        overscrollBehavior: 'none'
     }}>
 
       {/* Breathing orb — absolutely centered, expands to fill screen */}

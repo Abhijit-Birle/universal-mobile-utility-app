@@ -47,9 +47,15 @@ export default function VipassanaScreen({ onClose, onComplete, activeSource, mus
 
   if (!sessionStarted) {
     return (
-      <div style={{
-        position: 'fixed', inset: 0, zIndex: 1000,
-        background: '#0F1117', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 24
+      <div 
+        onTouchStart={(e) => e.stopPropagation()}
+        onTouchMove={(e) => e.stopPropagation()}
+        onTouchEnd={(e) => e.stopPropagation()}
+        style={{
+          position: 'fixed', inset: 0, zIndex: 1000,
+          background: '#0F1117', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 24,
+          touchAction: 'none',
+          overscrollBehavior: 'none'
       }}>
         <button onClick={onClose} style={{ position: 'absolute', top: 30, left: 24, background: 'none', border: 'none', color: '#8B8FA3', fontSize: 28, cursor: 'pointer' }}>×</button>
         <div style={{ width: 80, height: 80, borderRadius: 24, background: '#1C1F26', boxShadow: 'inset 4px 4px 10px #0c0d12, inset -4px -4px 10px #2c313a', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 32 }}>
@@ -97,9 +103,15 @@ export default function VipassanaScreen({ onClose, onComplete, activeSource, mus
 
   if (sessionCompleted) {
     return (
-      <div style={{
-        position: 'fixed', inset: 0, zIndex: 1000,
-        background: '#0F1117', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 24
+      <div 
+        onTouchStart={(e) => e.stopPropagation()}
+        onTouchMove={(e) => e.stopPropagation()}
+        onTouchEnd={(e) => e.stopPropagation()}
+        style={{
+          position: 'fixed', inset: 0, zIndex: 1000,
+          background: '#0F1117', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 24,
+          touchAction: 'none',
+          overscrollBehavior: 'none'
       }}>
         <CheckCircle2 size={80} color="#5dcaa5" style={{ marginBottom: 32 }} />
         <h1 style={{ color: '#fff', fontSize: 28, fontWeight: 800, marginBottom: 8, fontFamily: 'sans-serif' }}>Practice Complete</h1>
@@ -136,9 +148,15 @@ export default function VipassanaScreen({ onClose, onComplete, activeSource, mus
   const currentPrompt = prompts[Math.floor(elapsed / 15) % prompts.length];
 
   return (
-    <div style={{
-      position: 'fixed', inset: 0, zIndex: 1000,
-      background: '#0F1117', overflow: 'hidden',
+    <div 
+      onTouchStart={(e) => e.stopPropagation()}
+      onTouchMove={(e) => e.stopPropagation()}
+      onTouchEnd={(e) => e.stopPropagation()}
+      style={{
+        position: 'fixed', inset: 0, zIndex: 1000,
+        background: '#0F1117', overflow: 'hidden',
+        touchAction: 'none',
+        overscrollBehavior: 'none'
     }}>
       <div style={{ position: 'absolute', inset: 0, zIndex: -1, opacity: 0.2, pointerEvents: 'none' }}>
         <React.Suspense fallback={null}>

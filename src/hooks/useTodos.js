@@ -54,8 +54,9 @@ export function useTodos() {
           id: t.id ? String(t.id) : generateId(),
           text: t.text || 'Untitled',
           done: !!t.done,
-          important: t.priority === 'High', // Convert old high priority to important
-          myDayDate: t.date === getLocalDateString() ? getLocalDateString() : null, // If it was added today, put in My Day
+          important: t.priority === 'High',
+          priority: t.priority === 'High' ? 1 : (t.priority === 'Medium' ? 3 : 4),
+          myDayDate: t.date === getLocalDateString() ? getLocalDateString() : null,
           due: t.due || null,
           dueTime: t.dueTime || null,
           reminder: t.reminder || null,
@@ -67,7 +68,8 @@ export function useTodos() {
           subtasks: (t.subtasks || []).map(s => ({
             id: s.id ? String(s.id) : generateId(),
             text: s.text,
-            done: !!s.done
+            done: !!s.done,
+            subtasks: s.subtasks || []
           }))
         }));
         await setItem(STORAGE_KEY, storedTodos);
@@ -99,6 +101,7 @@ export function useTodos() {
       text: '',
       done: false,
       important: false,
+      priority: 4,
       myDayDate: null,
       due: null,
       dueTime: null,

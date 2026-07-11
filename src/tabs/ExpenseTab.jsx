@@ -29,7 +29,7 @@ export default function ExpenseTab(props) {
     methodLabel, dailyAvgSpend, currentMonthTx, spentThisMonth, incomeThisMonth, netSavings, monthlyBurnRate, spentByCategory, pieData, categoryPieData, txByDay, dayFiltered, targetYearStr, targetMonthStr, monthLabel, daysInMonth, BUDGETS
   } = props;
   
-  const { Play, Pause, Square, Music, Volume2, VolumeX, List, Check, X, Target, BarChart2, CheckCircle2, ChevronRight, Settings2, Clock, Upload, XCircle, LayoutDashboard, Settings, Edit, Bell, ListChecks, Flame, Plus, Trash2, Edit2, Search, ChevronDown, Download, Eye, Tag, RefreshCw, DollarSign, Filter, ShoppingCart, Smartphone, Landmark, Calendar, AlertTriangle, ArrowRight, ChevronLeft, Flower2, PiggyBank, Box, MonitorPlay, TimerIcon, Wallet, User, Notebook, Home, Building2, TrendingDown, TrendingUp, RotateCcw, StopCircle, PlayCircle, PauseCircle } = LucideIcons;
+  const { Play, Pause, Square, Music, Volume2, VolumeX, List, Check, X, Target, BarChart2, CheckCircle2, ChevronRight, Settings2, Clock, Upload, XCircle, LayoutDashboard, Settings, Edit, Bell, ListChecks, Flame, Plus, Trash2, Edit2, Search, ChevronDown, Download, Eye, Tag, RefreshCw, DollarSign, Filter, ShoppingCart, Smartphone, Landmark, Calendar, AlertTriangle, ArrowRight, ChevronLeft, Flower2, PiggyBank, Box, MonitorPlay, TimerIcon, Wallet, User, Notebook, Home, Building2, TrendingDown, TrendingUp, RotateCcw, StopCircle, PlayCircle, PauseCircle, Pencil, ChevronUp, Repeat, Split } = LucideIcons;
 
 
     const now = new Date();

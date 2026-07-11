@@ -162,11 +162,16 @@ export function useTodos() {
     setTodos(prev => prev.map(t => t.listId === id ? { ...t, listId: 'default' } : t));
   }, []);
 
+  const bulkAddTodos = useCallback((newTasks) => {
+    setTodos(prev => [...newTasks, ...prev]);
+  }, []);
+
   return {
     todos,
     lists,
     loading,
     addTodo,
+    bulkAddTodos,
     updateTodo,
     toggleDone,
     deleteTodo,

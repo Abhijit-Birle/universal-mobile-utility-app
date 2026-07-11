@@ -142,6 +142,13 @@ export function useExpenses() {
     [expenses, persist]
   );
 
+  const bulkAddExpenses = useCallback(
+    (newExpenses) => {
+      persist([...newExpenses, ...expenses]);
+    },
+    [expenses, persist]
+  );
+
   const quickCapture = useCallback(
     (text, category = 'other') => {
       const trimmed = text.trim();
@@ -232,6 +239,7 @@ export function useExpenses() {
     loading,
     undoBuffer,
     addExpense,
+    bulkAddExpenses,
     quickCapture,
     updateExpense,
     deleteExpense,

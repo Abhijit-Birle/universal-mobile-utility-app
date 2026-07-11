@@ -1,6 +1,9 @@
 import React, { useState } from "react";
-import { User, Sun, Moon, Sparkles, ChevronDown, Check, EyeOff, Eye, Settings, DollarSign, Tag, AlertTriangle, X } from "lucide-react";
+import { User, Sun, Moon, Sparkles, ChevronDown, Check, EyeOff, Eye, Settings, DollarSign, Tag, AlertTriangle, X, FileText } from "lucide-react";
 import { CURRENCIES } from "../utils/currency.js";
+import ImportWizard from "../components/ImportWizard.jsx";
+import { useTodos } from "../hooks/useTodos.js";
+import { useExpenses } from "../hooks/useExpenses.js";
 
 export default function ProfileTab({
   theme, fontDisplay, fontBody, darkMode, setDarkMode, setShowInsights, apiKey, setApiKey,
@@ -9,6 +12,10 @@ export default function ProfileTab({
 }) {
   const [keyVisible, setKeyVisible] = useState(false);
   const [tempKey, setTempKey] = useState(apiKey || "");
+  const [showImportWizard, setShowImportWizard] = useState(false);
+  
+  const { bulkAddTodos } = useTodos();
+  const { bulkAddExpenses } = useExpenses();
 
   return (
     <div style={{ padding: "0 18px", paddingBottom: 100, paddingTop: 10, animation: "slideInRight 0.25s ease" }}>
@@ -28,6 +35,18 @@ export default function ProfileTab({
 
       <SectionLabel icon={<Sparkles size={16} />} title="AI Intelligence" />
       <div style={{ display: "flex", flexDirection: "column", gap: 12, marginBottom: 24 }}>
+        
+        {/* Import Data Card */}
+        <div
+          onClick={() => setShowImportWizard(true)}
+          style={{ display: "flex", alignItems: "center", justifyContent: "space-between", background: theme.bg, padding: 16, borderRadius: 16, boxShadow: theme.shadowRaisedSm, cursor: "pointer" }}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <FileText size={18} color={theme.accent} />
+            <span style={{ fontSize: 15, fontWeight: 600, color: theme.textPrimary, ...fontBody }}>Import Data (YNAB, Mint, Todoist)</span>
+          </div>
+          <ChevronDown size={16} color={theme.textSecondary} style={{ transform: "rotate(-90deg)" }} />
+        </div>
         {/* AI Insights Card */}
         <div
           onClick={() => setShowInsights(true)}
@@ -108,6 +127,19 @@ export default function ProfileTab({
       >
         <span style={{ fontSize: 15, fontWeight: 700, color: "#fff", ...fontBody }}>Wipe Transactions Data</span>
       </div>
+
+      {showImportWizard && (
+        <ImportWizard 
+          theme={theme}
+          fontDisplay={fontDisplay}
+          fontBody={fontBody}
+          NeoSurface={NeoSurface}
+          PrimaryButton={PrimaryButton}
+          onClose={() => setShowImportWizard(false)}
+          onImportTodos={(data) => { bulkAddTodos(data); }}
+          onImportExpenses={(data) => { bulkAddExpenses(data); }}
+        />
+      )}
     </div>
   );
 }

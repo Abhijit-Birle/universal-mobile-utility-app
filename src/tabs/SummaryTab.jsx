@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useTodos, generateId } from '../hooks/useTodos.js';
+import { calculateStressScore, getZenRecommendation } from '../utils/zenContext.js';
 
 
 import { getLocalDateString } from '../utils/date.js';
@@ -301,6 +302,9 @@ export default function SummaryTab({ theme, NeoSurface, NeoInput, fontDisplay, f
   const [quickAddReminder, setQuickAddReminder] = useState('');
   const [quickAddSubtasks, setQuickAddSubtasks] = useState([]);
   const inputRef = useRef(null);
+  const [zenDismissed, setZenDismissed] = useState(false);
+  const stressResult = calculateStressScore(todos, transactions);
+  const zenRec = getZenRecommendation(stressResult);
   
   const today = getLocalDateString();
 
@@ -376,6 +380,41 @@ export default function SummaryTab({ theme, NeoSurface, NeoInput, fontDisplay, f
 
   return (
     <div className="scroll-content" style={{ padding: '4px 18px 100px', flex: 1 }}>
+
+      {/* Contextual Zen Banner */}
+      {stressResult.isHigh && !zenDismissed && (
+        <div style={{
+          background: `linear-gradient(135deg, ${zenRec.color}22, ${zenRec.color}11)`,
+          border: `1px solid ${zenRec.color}44`,
+          borderRadius: 20, padding: '14px 16px',
+          marginBottom: 16, display: 'flex', alignItems: 'center', gap: 12,
+          animation: 'slideInRight 0.3s ease',
+        }}>
+          <span style={{ fontSize: 26 }}>{zenRec.emoji}</span>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 14, fontWeight: 700, color: theme.textPrimary, ...fontDisplay }}>{zenRec.title}</div>
+            <div style={{ fontSize: 12, color: theme.textSecondary, marginTop: 2, ...fontBody }}>{zenRec.subtitle}</div>
+          </div>
+          <div style={{ display: 'flex', gap: 6 }}>
+            <button
+              onClick={() => onNavigate('meditation')}
+              style={{
+                padding: '6px 14px', borderRadius: 12, border: 'none',
+                background: zenRec.color, color: '#fff',
+                fontSize: 12, fontWeight: 700, cursor: 'pointer', ...fontBody,
+              }}
+            >Try it</button>
+            <button
+              onClick={() => setZenDismissed(true)}
+              style={{
+                padding: '6px 10px', borderRadius: 12, border: 'none',
+                background: 'rgba(0,0,0,0.08)', color: theme.textSecondary,
+                fontSize: 12, cursor: 'pointer',
+              }}
+            >×</button>
+          </div>
+        </div>
+      )}
 
       {/* Header */}
       <div style={{ marginBottom: 16 }}>

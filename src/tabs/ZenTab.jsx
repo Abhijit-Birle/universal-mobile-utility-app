@@ -6,6 +6,8 @@ import BodyScanScreen from "../components/BodyScanScreen.jsx";
 import SilentMeditationScreen from "../components/SilentMeditationScreen.jsx";
 import VipassanaScreen from "../components/VipassanaScreen.jsx";
 import ReflectionHistory from "../components/ReflectionHistory.jsx";
+import GuidedMeditationPlayer from "../components/GuidedMeditationPlayer.jsx";
+import { getScriptForContext, calculateStressScore } from "../utils/zenContext.js";
 
 const BreatheIllustration = () => (
   <svg width="80" height="90" viewBox="0 0 90 100" fill="none" style={{ position: 'absolute', bottom: 10, right: 10, opacity: 0.9, overflow: 'visible' }}>
@@ -51,8 +53,10 @@ export default function ZenTab({
   zenStreak, activeTechnique, setActiveTechnique, markZenActiveToday,
   showReflectionHistory, setShowReflectionHistory,
   activeSource, setActiveSource, MUSIC_OPTIONS, handleMeditationComplete,
-  NeoSurface
+  NeoSurface, todos, transactions,
 }) {
+  const stressResult = calculateStressScore(todos || [], transactions || []);
+  const guidedScript = getScriptForContext(stressResult);
   return (
     <div style={{ flex: 1, display: "flex", flexDirection: "column", padding: "20px 16px", gap: 16, overflowY: "auto" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "0 4px" }}>
@@ -152,7 +156,7 @@ export default function ZenTab({
         <NeoSurface
           onClick={() => setActiveTechnique('bodyscan')}
           style={{
-            background: '#FAC775', gridColumn: '1 / -1', borderRadius: 22, padding: 16, height: 110, display: 'flex', flexDirection: 'column', justifyContent: 'space-between', position: 'relative', overflow: 'hidden', cursor: 'pointer', color: '#412402'
+            background: '#FAC775', borderRadius: 22, padding: 16, height: 110, display: 'flex', flexDirection: 'column', justifyContent: 'space-between', position: 'relative', overflow: 'hidden', cursor: 'pointer', color: '#412402'
           }}
         >
           <div style={{ fontSize: 16, lineHeight: 1.3, zIndex: 2, position: 'relative', fontFamily: 'sans-serif' }}>
@@ -161,6 +165,26 @@ export default function ZenTab({
           <ScanIllustration />
           <div style={{ width: 32, height: 32, borderRadius: 16, background: '#412402', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 2, marginTop: 'auto' }}>
             <LucideIcons.ArrowRight size={16} color="#ffffff" strokeWidth={2.5} />
+          </div>
+        </NeoSurface>
+
+        {/* Card 6: AI Guided (Banner) */}
+        <NeoSurface
+          onClick={() => setActiveTechnique('guided')}
+          style={{
+            background: 'linear-gradient(135deg, #1a0a2e, #0d2438)', gridColumn: '1 / -1',
+            borderRadius: 22, padding: 16, height: 100,
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            position: 'relative', overflow: 'hidden', cursor: 'pointer',
+            border: '1px solid rgba(93,202,165,0.25)',
+          }}
+        >
+          <div style={{ zIndex: 2 }}>
+            <div style={{ fontSize: 16, fontWeight: 800, color: '#5DCAA5', fontFamily: 'sans-serif' }}>🧘 AI Guided</div>
+            <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.55)', marginTop: 2, ...fontBody }}>{guidedScript.title} · {guidedScript.duration}</div>
+          </div>
+          <div style={{ width: 36, height: 36, borderRadius: 18, background: '#5DCAA5', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 2 }}>
+            <LucideIcons.Play size={16} color="#fff" fill="#fff" />
           </div>
         </NeoSurface>
       </div>
@@ -200,6 +224,16 @@ export default function ZenTab({
           onClose={() => setActiveTechnique(null)}
           onComplete={handleMeditationComplete}
           activeSource={activeSource} musicOptions={MUSIC_OPTIONS} onChangeSource={setActiveSource}
+        />
+      )}
+      {activeTechnique === 'guided' && (
+        <GuidedMeditationPlayer
+          script={guidedScript}
+          theme={theme}
+          fontDisplay={fontDisplay}
+          fontBody={fontBody}
+          onClose={() => setActiveTechnique(null)}
+          onComplete={() => { handleMeditationComplete(); setActiveTechnique(null); markZenActiveToday(); }}
         />
       )}
       

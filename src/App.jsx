@@ -1775,6 +1775,7 @@ export default function NeoApp() {
               setShowReflectionHistory={setShowReflectionHistory} activeSource={activeSource}
               setActiveSource={setActiveSource} MUSIC_OPTIONS={MUSIC_OPTIONS}
               handleMeditationComplete={handleMeditationComplete} NeoSurface={NeoSurface}
+              todos={todos} transactions={transactions}
             />}
             {activeTab === "timer" && <TimerTab {...appState} />}
             {activeTab === "todo" && <TodoTab theme={theme} NeoSurface={NeoSurface} NeoInput={NeoInput} PrimaryButton={PrimaryButton} SectionLabel={SectionLabel} fontDisplay={fontDisplay} fontBody={fontBody} />}

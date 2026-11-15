@@ -1,84 +1,130 @@
-# Konto
+<div align="center">
 
-A personal all-in-one app for Android and iOS: todos, expenses, notes, focus timers, and guided calm, in one dark, clay-soft UI.
+# 💜 Konto
 
-Built for fun, mostly to see how far a single React codebase can go as a real mobile app.
+**One calm app for your tasks, money, notes, focus, and mind**
 
-<p align="center">
-  <img src="docs/screenshots/home.jpg" width="160" alt="Home" />
-  <img src="docs/screenshots/expense.jpg" width="160" alt="Expenses" />
-  <img src="docs/screenshots/todo.jpg" width="160" alt="Todo" />
-  <img src="docs/screenshots/focus.jpg" width="160" alt="Focus timer" />
-  <img src="docs/screenshots/zen.jpg" width="160" alt="Zen" />
+<a href="https://github.com/Abhijit-Birle/universal-mobile-utility-app">
+  <img src="https://readme-typing-svg.demolab.com?font=Fira+Code&pause=1200&color=8B7CF6&center=true&vCenter=true&width=520&lines=Todos%2C+expenses%2C+notes+in+one+app;Focus+timers+with+ambient+sound;Guided+breathing+and+meditation;One+React+codebase%2C+real+mobile+app" alt="Typing animation" />
+</a>
+
+<br />
+
+![Status](https://img.shields.io/badge/status-hobby%20project-8B7CF6?style=for-the-badge)
+![React](https://img.shields.io/badge/React-19-20232A?style=for-the-badge&logo=react&logoColor=61DAFB)
+![Capacitor](https://img.shields.io/badge/Capacitor-8-119EFF?style=for-the-badge&logo=capacitor&logoColor=white)
+![Platform](https://img.shields.io/badge/platform-Android%20%7C%20iOS-2D2D2D?style=for-the-badge)
+
+<p>
+  <a href="#-highlights">Highlights</a> ·
+  <a href="#-screenshots">Screenshots</a> ·
+  <a href="#-everything-inside">Everything inside</a> ·
+  <a href="#-run-it">Run it</a>
 </p>
+
+</div>
+
+---
+
+## 👋 Why I built this
+
+I wanted one app for the small daily things instead of juggling five. It also became a playground for native packaging with Capacitor, smooth animations, WebGL visuals, and a bit of AI.
+
+> 🛠️ Hobby project. Rough edges included, and it changes whenever I feel like tinkering.
+
+## ✨ Highlights
+
+<table>
+  <tr>
+    <td width="50%" valign="top">
+      <h3>💸 Expenses that guide you</h3>
+      Net cashflow, category chart, <b>safe-to-spend per day</b>, budgets, upcoming bills, and no-spend day streaks. Import from YNAB or Mint.
+    </td>
+    <td width="50%" valign="top">
+      <h3>✅ Fast todos</h3>
+      My Day, Important, Planned, and custom lists. Priorities P1 to P4, reminders, subtasks, and quick add with <code>#p1</code> or <code>tomorrow</code>.
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <h3>🎧 Focus mode</h3>
+      Focus timer and Pomodoro with piano, rain, ocean, and white-noise backgrounds. Link a session to a todo.
+    </td>
+    <td width="50%" valign="top">
+      <h3>🧘 Zen space</h3>
+      Breathing, box breathing, silent meditation, vipassana, and body scan, plus AI-guided sessions.
+    </td>
+  </tr>
+</table>
+
+## 📸 Screenshots
+
+<table align="center">
+  <tr>
+    <td align="center"><img src="docs/screenshots/home.jpg" width="150" alt="Home" /><br /><sub><b>Home</b></sub></td>
+    <td align="center"><img src="docs/screenshots/expense.jpg" width="150" alt="Expenses" /><br /><sub><b>Expenses</b></sub></td>
+    <td align="center"><img src="docs/screenshots/todo.jpg" width="150" alt="Todo" /><br /><sub><b>Todo</b></sub></td>
+    <td align="center"><img src="docs/screenshots/focus.jpg" width="150" alt="Focus timer" /><br /><sub><b>Focus</b></sub></td>
+    <td align="center"><img src="docs/screenshots/zen.jpg" width="150" alt="Zen" /><br /><sub><b>Zen</b></sub></td>
+  </tr>
+</table>
 
 <details>
-<summary>More screenshots</summary>
+<summary><b>More screens</b></summary>
 <br />
-<p align="center">
-  <img src="docs/screenshots/notes.jpg" width="140" alt="Notes" />
-  <img src="docs/screenshots/pomodoro.jpg" width="140" alt="Pomodoro" />
-  <img src="docs/screenshots/breathe.jpg" width="140" alt="Breathing session" />
-  <img src="docs/screenshots/vipassana.jpg" width="140" alt="Vipassana session" />
-  <img src="docs/screenshots/settings.jpg" width="140" alt="Settings" />
-</p>
+
+<table align="center">
+  <tr>
+    <td align="center"><img src="docs/screenshots/notes.jpg" width="150" alt="Notes" /><br /><sub><b>Notes</b></sub></td>
+    <td align="center"><img src="docs/screenshots/pomodoro.jpg" width="150" alt="Pomodoro" /><br /><sub><b>Pomodoro</b></sub></td>
+    <td align="center"><img src="docs/screenshots/breathe.jpg" width="150" alt="Breathing" /><br /><sub><b>Breathe</b></sub></td>
+    <td align="center"><img src="docs/screenshots/vipassana.jpg" width="150" alt="Vipassana" /><br /><sub><b>Vipassana</b></sub></td>
+    <td align="center"><img src="docs/screenshots/settings.jpg" width="150" alt="Settings" /><br /><sub><b>Settings</b></sub></td>
+  </tr>
+</table>
+
 </details>
 
-## Why I built this
+## 📦 Everything inside
 
-I wanted one app for the small daily things instead of juggling five. It also became a playground: native packaging with Capacitor, smooth animations, WebGL visuals, and Gemini for a bit of AI. A side project with no deadlines, so it's a good place to try things.
+<details>
+<summary><b>Home</b></summary>
 
-> Hobby project. Things may be rough, and features change whenever I feel like tinkering.
-
-## What's inside
-
-**Home**
 - Daily dashboard: tasks, streak, focus minutes, spend
-- Mood check-in, quick actions, mini timer, "My Day" list
+- Mood check-in, quick actions, mini timer, My Day list
+</details>
 
-**Expenses**
-- Wallet view with net cashflow, category donut chart, balance, and safe-to-spend per day
-- Category budgets, upcoming bills, burn rate
-- No-spend day streaks
-- Import from YNAB / Mint, with custom category rules for CSV imports
+<details>
+<summary><b>Expenses and notes</b></summary>
 
-**Todo**
-- My Day, Important, Planned, and custom lists
-- P1–P4 priorities, due date and time, reminders, subtasks
-- Quick add with shortcuts like `#p1` and `tomorrow`
-
-**Focus**
-- Focus timer and Pomodoro (breaks, cycles, streak)
-- Ambient sounds: piano, rain, ocean waves, white noise
-- Link a session to a todo
-
-**Zen**
-- Guided practices: breathing, box breathing, silent meditation, vipassana, body scan, 1-minute 4-7-8
-- Mood check-in and AI-guided sessions
-
-**Notes**
+- Wallet view, category budgets, bills, burn rate
+- Import with custom category rules for CSV
 - Mood-tagged notes with tags and a block-style editor
+</details>
 
-**AI Insights**
-- Gemini-powered insights and statement import
+<details>
+<summary><b>AI and settings</b></summary>
 
-**Other**
-- Offline-first, data stays on the device
-- Base currency setting (INR by default), light/dark toggle
+- Gemini-powered insights and statement import (add your key in More, saved locally)
+- Base currency (INR by default), light/dark toggle
 - Haptics, native share sheet, Excel export
+- Offline-first: data stays on the device
+</details>
 
-## Built with
+## 🧰 Built with
 
-React 19 · Vite · TypeScript · Capacitor · Framer Motion · GSAP · Three.js / React Three Fiber · Recharts · Google Gemini · SheetJS
+![React](https://img.shields.io/badge/React-20232A?style=flat-square&logo=react&logoColor=61DAFB)
+![Vite](https://img.shields.io/badge/Vite-646CFF?style=flat-square&logo=vite&logoColor=white)
+![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?style=flat-square&logo=typescript&logoColor=white)
+![Capacitor](https://img.shields.io/badge/Capacitor-119EFF?style=flat-square&logo=capacitor&logoColor=white)
+![Three.js](https://img.shields.io/badge/Three.js-000000?style=flat-square&logo=threedotjs&logoColor=white)
+![GSAP](https://img.shields.io/badge/GSAP-88CE02?style=flat-square&logo=greensock&logoColor=white)
+![Framer Motion](https://img.shields.io/badge/Framer%20Motion-0055FF?style=flat-square&logo=framer&logoColor=white)
+![Gemini](https://img.shields.io/badge/Gemini-8E75B2?style=flat-square&logo=googlegemini&logoColor=white)
 
-## Things I enjoyed figuring out
+Also: Recharts, SheetJS, Lucide.
 
-<!-- Edit with your real learnings -->
-- Shipping a web app to Android and iOS with Capacitor
-- Keeping animations smooth on mobile with WebGL in the mix
-- Storing everything locally without a backend
-
-## Run it
+## 🚀 Run it
 
 ```bash
 git clone https://github.com/Abhijit-Birle/universal-mobile-utility-app.git
@@ -86,8 +132,6 @@ cd universal-mobile-utility-app
 npm install
 npm run dev
 ```
-
-AI features: open **More → Gemini API Key**, paste your key, and save. It is stored locally on your device.
 
 On a device:
 
@@ -97,10 +141,17 @@ npx cap sync
 npx cap open android   # or: npx cap open ios
 ```
 
-## What's next (maybe)
+For AI features, open **More → Gemini API Key** in the app and paste your key.
 
-Cloud backup, widgets. No promises.
+## 🗓️ What's next (maybe)
 
-## Author
+- [ ] Cloud backup
+- [ ] Widgets
+
+## 🙋 Author
 
 **Abhijit Birle** · [GitHub](https://github.com/Abhijit-Birle)
+
+<div align="center">
+  <sub>Made for fun. ⭐ a star is always welcome.</sub>
+</div>

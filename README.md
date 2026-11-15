@@ -1,41 +1,71 @@
 # Konto
 
-A personal all-in-one utility app for Android and iOS — notes, expenses, todos, timers, and a little AI on the side.
+A personal all-in-one app for Android and iOS: todos, expenses, notes, focus timers, and guided calm, in one dark, clay-soft UI.
 
 Built for fun, mostly to see how far a single React codebase can go as a real mobile app.
 
 <p align="center">
-  <img src="docs/screenshots/home.png" width="180" alt="Home" />
-  <img src="docs/screenshots/notes.png" width="180" alt="Notes" />
-  <img src="docs/screenshots/expenses.png" width="180" alt="Expenses" />
-  <img src="docs/screenshots/todo.png" width="180" alt="Todo" />
+  <img src="docs/screenshots/home.jpg" width="160" alt="Home" />
+  <img src="docs/screenshots/expense.jpg" width="160" alt="Expenses" />
+  <img src="docs/screenshots/todo.jpg" width="160" alt="Todo" />
+  <img src="docs/screenshots/focus.jpg" width="160" alt="Focus timer" />
+  <img src="docs/screenshots/zen.jpg" width="160" alt="Zen" />
 </p>
 
 <details>
 <summary>More screenshots</summary>
 <br />
 <p align="center">
-  <img src="docs/screenshots/timer.png" width="180" alt="Timer" />
-  <img src="docs/screenshots/zen.png" width="180" alt="Zen" />
-  <img src="docs/screenshots/insights.png" width="180" alt="AI Insights" />
+  <img src="docs/screenshots/notes.jpg" width="140" alt="Notes" />
+  <img src="docs/screenshots/pomodoro.jpg" width="140" alt="Pomodoro" />
+  <img src="docs/screenshots/breathe.jpg" width="140" alt="Breathing session" />
+  <img src="docs/screenshots/vipassana.jpg" width="140" alt="Vipassana session" />
+  <img src="docs/screenshots/settings.jpg" width="140" alt="Settings" />
 </p>
 </details>
 
 ## Why I built this
 
-I wanted one app for the small things I use daily instead of juggling five. It also became a playground: native packaging with Capacitor, smooth animations, a bit of 3D, and Gemini for insights. A side project with no deadlines, so it's been a good place to try things.
+I wanted one app for the small daily things instead of juggling five. It also became a playground: native packaging with Capacitor, smooth animations, WebGL visuals, and Gemini for a bit of AI. A side project with no deadlines, so it's a good place to try things.
 
 > Hobby project. Things may be rough, and features change whenever I feel like tinkering.
 
 ## What's inside
 
-- **Notes** with a code-friendly editor
-- **Expenses** with charts and Excel export
-- **Todos**
-- **Timer and Zen** for focus and breathing
-- **AI Insights** powered by Gemini
+**Home**
+- Daily dashboard: tasks, streak, focus minutes, spend
+- Mood check-in, quick actions, mini timer, "My Day" list
+
+**Expenses**
+- Wallet view with net cashflow, category donut chart, balance, and safe-to-spend per day
+- Category budgets, upcoming bills, burn rate
+- No-spend day streaks
+- Import from YNAB / Mint, with custom category rules for CSV imports
+
+**Todo**
+- My Day, Important, Planned, and custom lists
+- P1–P4 priorities, due date and time, reminders, subtasks
+- Quick add with shortcuts like `#p1` and `tomorrow`
+
+**Focus**
+- Focus timer and Pomodoro (breaks, cycles, streak)
+- Ambient sounds: piano, rain, ocean waves, white noise
+- Link a session to a todo
+
+**Zen**
+- Guided practices: breathing, box breathing, silent meditation, vipassana, body scan, 1-minute 4-7-8
+- Mood check-in and AI-guided sessions
+
+**Notes**
+- Mood-tagged notes with tags and a block-style editor
+
+**AI Insights**
+- Gemini-powered insights and statement import
+
+**Other**
 - Offline-first, data stays on the device
-- Haptics and native share sheet
+- Base currency setting (INR by default), light/dark toggle
+- Haptics, native share sheet, Excel export
 
 ## Built with
 
@@ -57,13 +87,7 @@ npm install
 npm run dev
 ```
 
-For AI features, add a `.env` file:
-
-```env
-VITE_GEMINI_API_KEY=your_key_here
-```
-
-> `VITE_*` keys end up in the client bundle. Fine for personal use, not for a public release.
+AI features: open **More → Gemini API Key**, paste your key, and save. It is stored locally on your device.
 
 On a device:
 
@@ -75,7 +99,7 @@ npx cap open android   # or: npx cap open ios
 
 ## What's next (maybe)
 
-Cloud backup, reminders, widgets. No promises.
+Cloud backup, widgets. No promises.
 
 ## Author
 

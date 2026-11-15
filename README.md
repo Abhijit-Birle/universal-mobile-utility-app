@@ -3,6 +3,21 @@
 All-in-one personal utility app for Android and iOS. Notes, expenses, todos, timers, and AI insights in one place. Built with React + Vite, packaged for mobile with Capacitor.
 
 > **Status:** Work in progress.
+> <img width="1440" height="2304" alt="Screenshot_20261116_003413_Konto" src="https://github.com/user-attachments/assets/1c6488b9-6251-40f5-adfe-c9e02533f9dd" />
+<img width="1440" height="2304" alt="Screenshot_20261116_003523_Konto" src="https://github.com/user-attachments/assets/420a5a83-5cd5-48e4-97b4-d1f05c779b3c" />
+<img width="1440" height="2304" alt="Screenshot_20261116_003540_Konto" src="https://github.com/user-attachments/assets/7da4a4bf-5df4-4a44-b43a-001443224dbb" />
+<img width="1440" height="2304" alt="Screenshot_20261116_003559_Konto" src="https://github.com/user-attachments/assets/2091d42f-ecc3-4351-80bb-9b6cb8f7960f" />
+<img width="1440" height="2304" alt="Screenshot_20261116_003610_Konto" src="https://github.com/user-attachments/assets/40629a3e-1253-488c-b9c9-ee2805de12cc" />
+<img width="1440" height="2304" alt="Screenshot_20261116_003619_Konto" src="https://github.com/user-attachments/assets/7d5e54a6-173e-4615-a89d-e026a4ab576e" />
+<img width="1440" height="2304" alt="Screenshot_20261116_003623_Konto" src="https://github.com/user-attachments/assets/945db472-c60f-4d65-9ce0-4e45426316ad" />
+<img width="1440" height="2304" alt="Screenshot_20261116_003629_Konto" src="https://github.com/user-attachments/assets/c275eda9-06e5-4e03-a569-b4a5b8df4ea9" />
+<img width="1440" height="2304" alt="Screenshot_20261116_003647_Konto" src="https://github.com/user-attachments/assets/eea28124-2c52-4dca-9686-abf5ed79c15a" />
+<img width="1440" height="2304" alt="Screenshot_20261116_003728_Konto" src="https://github.com/user-attachments/assets/9e065647-7215-492c-907a-d065e3951c9a" />
+<img width="1440" height="2304" alt="Screenshot_20261116_003744_Konto" src="https://github.com/user-attachments/assets/97c4c7e7-cf44-4ce6-83ac-3d74b5af2625" />
+<img width="1440" height="2304" alt="Screenshot_20261116_003754_Konto" src="https://github.com/user-attachments/assets/cc6a325f-279f-4cbd-87d6-abb65a6a03e0" />
+<img width="1440" height="2304" alt="Screenshot_20261116_003808_Konto" src="https://github.com/user-attachments/assets/f5e84671-d5b2-4ab0-a80a-5b31e677ef75" />
+<img width="1440" height="2304" alt="Screenshot_20261116_003821_Konto" src="https://github.com/user-attachments/assets/e893063c-19bb-4a4c-b022-9aa7cb4cd98a" />
+
 ---
 
 ## Features
